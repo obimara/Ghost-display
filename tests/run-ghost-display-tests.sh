@@ -90,6 +90,7 @@ write_mock_commands
 # 1. Default dual 1080p profile.
 default_out="$(run_dry_profile default)"
 assert_contains "${default_out}" "framebuffer=3840x1080"
+assert_contains "${default_out}" "log="
 assert_contains "${default_out}" "Ghost-1: 1920x1080+0+0"
 assert_contains "${default_out}" "Ghost-2: 1920x1080+1920+0"
 

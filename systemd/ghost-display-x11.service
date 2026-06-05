@@ -3,6 +3,9 @@ Description=Ghost X11 dummy display for RustDesk
 After=network.target
 
 [Service]
+Type=simple
+Restart=on-failure
+RestartSec=2
 Type=oneshot
 RemainAfterExit=yes
 Environment=GHOST_DISPLAY_NUM=20
@@ -11,6 +14,7 @@ Environment=GHOST_RESOLUTION=1920x1080
 Environment=GHOST_SCALE=1.0
 Environment=GHOST_DPI=96
 Environment=GHOST_LAYOUT=horizontal
+Environment=GHOST_STAY_FOREGROUND=1
 ExecStart=/usr/local/bin/ghost-display-x11
 
 [Install]

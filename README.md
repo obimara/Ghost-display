@@ -18,6 +18,8 @@ This is a separate X11 session for RustDesk. It does not try to merge dummy outp
 - [`config/20-ghost-display.conf`](config/20-ghost-display.conf): Xorg dummy config with common modes and `Virtual 8192 8192`.
 - [`scripts/ghost-display-x11.sh`](scripts/ghost-display-x11.sh): starts Xorg, computes the layout, sets DPI, and creates XRandR monitors.
 - [`scripts/compare-ghost-profiles.sh`](scripts/compare-ghost-profiles.sh): compares four practical profiles and recommends the balanced one.
+- [`scripts/debug-ghost-display.sh`](scripts/debug-ghost-display.sh): prints dependency, service, DRM, and XRandR diagnostics.
+- [`scripts/rustdesk-auto-display.sh`](scripts/rustdesk-auto-display.sh): starts RustDesk on `:0` when a physical connector is connected, otherwise `:20`.
 - [`systemd/ghost-display-x11.service`](systemd/ghost-display-x11.service): optional systemd unit.
 - [`tests/run-ghost-display-tests.sh`](tests/run-ghost-display-tests.sh): dry-run and mocked-runtime test harness.
 
@@ -45,7 +47,7 @@ sudo ./install.sh && DISPLAY=:20 xrandr --listmonitors
 Custom profile example:
 
 ```bash
-GHOST_RESOLUTION=2560x1440 GHOST_DPI=120 sudo -E ./install.sh
+GHOST_RESOLUTION=2560x1440 GHOST_DPI=120 GHOST_XORG_LOG=/var/log/ghost-display-20.log sudo -E ./install.sh
 ```
 
 If you want to install files without starting the service:
@@ -70,18 +72,28 @@ Monitors: 2
 
 ## Run RustDesk
 
+Force RustDesk to the ghost display:
+
 ```bash
 DISPLAY=:20 rustdesk
 ```
 
-For a RustDesk systemd service, add:
+Automatically choose the display in one line:
+
+```bash
+rustdesk-auto-display
+```
+
+`rustdesk-auto-display` chooses `:0` when a physical DRM connector reports `connected` and that X display responds to `xset`; otherwise it chooses the ghost display `:20`. Override with `RUSTDESK_PHYSICAL_DISPLAY` and `RUSTDESK_GHOST_DISPLAY` if your displays use different names.
+
+For a RustDesk systemd service, use the wrapper as the command:
 
 ```ini
 [Service]
-Environment=DISPLAY=:20
+ExecStart=/usr/local/bin/rustdesk-auto-display rustdesk
 ```
 
-RustDesk then sees one X11 framebuffer split into logical XRandR monitors.
+RustDesk then starts on the physical X display when a screen exists, or on the ghost X11 framebuffer when no screen is connected.
 
 ## Screen options
 
@@ -96,6 +108,7 @@ RustDesk then sees one X11 framebuffer split into logical XRandR monitors.
 | `GHOST_LAYOUT` | `horizontal` | `horizontal` or `vertical`. |
 | `GHOST_NAME_PREFIX` | `Ghost` | Monitor name prefix. |
 | `GHOST_MONITOR_SPECS` | empty | Per-monitor specs: `WIDTHxHEIGHT[@SCALE],...`. |
+| `GHOST_XORG_LOG` | `/var/log/ghost-display-N.log` as root, `/tmp/ghost-display-N.log` otherwise | Xorg log path. |
 | `GHOST_DRY_RUN` | `0` | Set to `1` to print the plan without starting Xorg. |
 | `GHOST_MAX_WIDTH` / `GHOST_MAX_HEIGHT` | `8192` | Safety limit matching the sample Xorg `Virtual` size. |
 
@@ -160,7 +173,15 @@ scripts/compare-ghost-profiles.sh
 
 The test harness validates all four profiles, the oversized-framebuffer guard, and the runtime command sequence with mocked `Xorg`, `xrandr`, `xset`, and `xrdb`. It also verifies that stale `Ghost-*` monitors are removed without touching physical names such as `HDMI-A-1`.
 
+For a field debug report after install, run:
+
+```bash
+ghost-display-debug
+```
+
 ## systemd
+
+The bundled service keeps the ghost Xorg process tied to systemd with `GHOST_STAY_FOREGROUND=1` and restarts it on failure.
 
 ```bash
 sudo cp config/20-ghost-display.conf /etc/X11/ghost-display.conf
