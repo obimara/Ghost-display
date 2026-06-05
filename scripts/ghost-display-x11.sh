@@ -5,20 +5,7 @@ DISPLAY_NUM="${GHOST_DISPLAY_NUM:-20}"
 DISPLAY_NAME="${GHOST_DISPLAY:-:${DISPLAY_NUM}}"
 CONFIG_FILE="${GHOST_XORG_CONFIG:-/etc/X11/ghost-display.conf}"
 PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/ghost-display-${DISPLAY_NUM}.pid"
-
-default_log_file() {
-    if [[ -n "${GHOST_XORG_LOG:-}" ]]; then
-        printf '%s\n' "${GHOST_XORG_LOG}"
-    elif [[ "${EUID}" -eq 0 ]]; then
-        printf '/var/log/ghost-display-%s.log\n' "${DISPLAY_NUM}"
-    else
-        printf '/tmp/ghost-display-%s.log\n' "${DISPLAY_NUM}"
-    fi
-}
-
-LOG_FILE="$(default_log_file)"
-PID_FILE_WRITTEN=0
-PID_FILE_PID=""
+LOG_FILE="${GHOST_XORG_LOG:-/tmp/ghost-display-${DISPLAY_NUM}.log}"
 MONITORS="${GHOST_MONITORS:-2}"
 RESOLUTION="${GHOST_RESOLUTION:-${GHOST_WIDTH:-1920}x${GHOST_HEIGHT:-1080}}"
 SCALE="${GHOST_SCALE:-1.0}"
@@ -27,7 +14,6 @@ LAYOUT="${GHOST_LAYOUT:-horizontal}"
 NAME_PREFIX="${GHOST_NAME_PREFIX:-Ghost}"
 MONITOR_SPECS="${GHOST_MONITOR_SPECS:-}"
 DRY_RUN="${GHOST_DRY_RUN:-0}"
-STAY_FOREGROUND="${GHOST_STAY_FOREGROUND:-0}"
 MAX_WIDTH="${GHOST_MAX_WIDTH:-8192}"
 MAX_HEIGHT="${GHOST_MAX_HEIGHT:-8192}"
 
@@ -41,7 +27,6 @@ Environment options:
   GHOST_DISPLAY_NUM=20             X display number used when GHOST_DISPLAY is unset.
   GHOST_DISPLAY=:20                Full X display name.
   GHOST_XORG_CONFIG=/path.conf     Xorg dummy config path.
-  GHOST_XORG_LOG=/path.log         Xorg log path. Defaults to /var/log as root, /tmp otherwise.
   GHOST_MONITORS=2                 Number of identical logical monitors.
   GHOST_RESOLUTION=1920x1080       Base resolution for each monitor.
   GHOST_SCALE=1.0                  Pixel scale multiplier per monitor.
@@ -50,7 +35,6 @@ Environment options:
   GHOST_NAME_PREFIX=Ghost          Monitor name prefix.
   GHOST_MONITOR_SPECS=...          Per-monitor specs, e.g. 1920x1080@1,2560x1440@1.25
   GHOST_DRY_RUN=1                  Print the plan without starting Xorg.
-  GHOST_STAY_FOREGROUND=1          Keep the script alive and wait for Xorg.
   GHOST_MAX_WIDTH=8192             Safety limit matching the sample Xorg Virtual width.
   GHOST_MAX_HEIGHT=8192            Safety limit matching the sample Xorg Virtual height.
 
@@ -61,35 +45,10 @@ Examples:
 USAGE
 }
 
-cleanup_pid() {
-    if [[ "${PID_FILE_WRITTEN}" != "1" || -z "${PID_FILE_PID}" ]]; then
-        return
-    fi
-
-    if [[ ! -f "${PID_FILE}" ]] || [[ "$(cat "${PID_FILE}" 2>/dev/null || true)" != "${PID_FILE_PID}" ]]; then
-        return
-    fi
-
-    if ! xorg_pid_matches "${PID_FILE_PID}"; then
-        rm -f "${PID_FILE}"
-    fi
-}
-trap cleanup_pid EXIT
-
-write_pid_file() {
-    PID_FILE_PID="$1"
-    echo "${PID_FILE_PID}" >"${PID_FILE}"
-    PID_FILE_WRITTEN=1
-}
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run)
             DRY_RUN=1
-            shift
-            ;;
-        --stay)
-            STAY_FOREGROUND=1
             shift
             ;;
         -h|--help)
@@ -262,7 +221,6 @@ print_plan() {
     echo "Ghost X11 display plan"
     echo "  DISPLAY=${DISPLAY_NAME}"
     echo "  config=${CONFIG_FILE}"
-    echo "  log=${LOG_FILE}"
     echo "  framebuffer=${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT}"
     echo "  dpi=${DPI}"
     for i in "${!MONITOR_NAMES[@]}"; do
@@ -270,35 +228,12 @@ print_plan() {
     done
 }
 
-xorg_pid_matches() {
-    local pid="$1"
-    local args
-
-    [[ -n "${pid}" ]] || return 1
-    kill -0 "${pid}" 2>/dev/null || return 1
-
-    args="$(ps -p "${pid}" -o args= 2>/dev/null || true)"
-    [[ "${args}" == *"Xorg ${DISPLAY_NAME}"* && "${args}" == *"${CONFIG_FILE}"* ]]
-}
-
 is_xorg_running() {
-    local pid
-
-    if [[ -f "${PID_FILE}" ]]; then
-        pid="$(cat "${PID_FILE}" 2>/dev/null || true)"
-        if xorg_pid_matches "${pid}"; then
-            return 0
-        fi
-        rm -f "${PID_FILE}"
-    fi
-
-    pid="$(pgrep -f "Xorg ${DISPLAY_NAME} .*${CONFIG_FILE}" | head -n 1 || true)"
-    if xorg_pid_matches "${pid}"; then
-        write_pid_file "${pid}"
+    if [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
         return 0
     fi
 
-    return 1
+    pgrep -f "Xorg ${DISPLAY_NAME} .*${CONFIG_FILE}" >/dev/null 2>&1
 }
 
 start_xorg() {
@@ -313,7 +248,7 @@ start_xorg() {
         -logfile "${LOG_FILE}" \
         >/dev/null 2>&1 &
 
-    write_pid_file "$!"
+    echo "$!" >"${PID_FILE}"
 
     for _ in {1..40}; do
         if DISPLAY="${DISPLAY_NAME}" xset q >/dev/null 2>&1; then
@@ -324,29 +259,6 @@ start_xorg() {
 
     echo "Xorg did not become ready. Check ${LOG_FILE}" >&2
     exit 1
-}
-
-stay_foreground() {
-    if [[ "${STAY_FOREGROUND}" != "1" ]]; then
-        return
-    fi
-
-    if [[ ! -f "${PID_FILE}" ]]; then
-        echo "Cannot stay in foreground: missing ${PID_FILE}" >&2
-        return 1
-    fi
-
-    local pid
-    pid="$(cat "${PID_FILE}")"
-
-    if wait "${pid}" 2>/dev/null; then
-        return 0
-    fi
-
-    while kill -0 "${pid}" 2>/dev/null; do
-        sleep 5
-    done
-    return 1
 }
 
 configure_monitors() {
@@ -391,7 +303,6 @@ main() {
     configure_monitors
     print_plan
     echo "RustDesk should be started with DISPLAY=${DISPLAY_NAME}."
-    stay_foreground
 }
 
 main "$@"
