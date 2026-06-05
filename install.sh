@@ -10,8 +10,8 @@ usage() {
     cat <<'USAGE'
 Usage: sudo ./install.sh [--no-start] [--no-deps]
 
-Installs Ghost-display dependencies, Xorg config, runtime script, RustDesk
-auto-display wrapper, profile tool, and systemd service. Pass GHOST_* variables with sudo -E to persist a custom
+Installs Ghost-display dependencies, Xorg config, runtime script, profile tool,
+and systemd service. Pass GHOST_* variables with sudo -E to persist a custom
 systemd profile, for example:
 
   GHOST_RESOLUTION=2560x1440 GHOST_DPI=120 sudo -E ./install.sh
@@ -69,8 +69,6 @@ install_files() {
     install -D -m 0644 "${ROOT_DIR}/config/20-ghost-display.conf" /etc/X11/ghost-display.conf
     install -D -m 0755 "${ROOT_DIR}/scripts/ghost-display-x11.sh" /usr/local/bin/ghost-display-x11
     install -D -m 0755 "${ROOT_DIR}/scripts/compare-ghost-profiles.sh" /usr/local/bin/compare-ghost-profiles
-    install -D -m 0755 "${ROOT_DIR}/scripts/debug-ghost-display.sh" /usr/local/bin/ghost-display-debug
-    install -D -m 0755 "${ROOT_DIR}/scripts/rustdesk-auto-display.sh" /usr/local/bin/rustdesk-auto-display
     install -D -m 0644 "${ROOT_DIR}/systemd/${SERVICE_NAME}" "/etc/systemd/system/${SERVICE_NAME}"
 }
 
@@ -78,8 +76,6 @@ systemd_escape() {
     local value="$1"
     value="${value//\\/\\\\}"
     value="${value//\"/\\\"}"
-    value="${value//%/%%}"
-    value="${value//$'\n'/\\n}"
     printf '%s' "${value}"
 }
 
@@ -94,7 +90,6 @@ write_profile_dropin() {
         GHOST_LAYOUT
         GHOST_NAME_PREFIX
         GHOST_MONITOR_SPECS
-        GHOST_XORG_LOG
         GHOST_MAX_WIDTH
         GHOST_MAX_HEIGHT
     )
@@ -148,11 +143,9 @@ print_done() {
     echo "Config: /etc/X11/ghost-display.conf"
     echo "Runtime: /usr/local/bin/ghost-display-x11"
     echo "Compare: /usr/local/bin/compare-ghost-profiles"
-    echo "Debug: /usr/local/bin/ghost-display-debug"
-    echo "RustDesk auto display: /usr/local/bin/rustdesk-auto-display"
     echo "Service: ${SERVICE_NAME}"
     echo "Verify: DISPLAY=:20 xrandr --listmonitors"
-    echo "Run RustDesk with: rustdesk-auto-display"
+    echo "Run RustDesk with: DISPLAY=:20 rustdesk"
 }
 
 main() {

@@ -6,6 +6,8 @@ After=network.target
 Type=simple
 Restart=on-failure
 RestartSec=2
+Type=oneshot
+RemainAfterExit=yes
 Environment=GHOST_DISPLAY_NUM=20
 Environment=GHOST_MONITORS=2
 Environment=GHOST_RESOLUTION=1920x1080
