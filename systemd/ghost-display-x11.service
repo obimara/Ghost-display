@@ -1,13 +1,13 @@
 [Unit]
 Description=Ghost X11 dummy display for RustDesk
+Documentation=https://github.com/obimara/Ghost-display
 After=network.target
 
 [Service]
 Type=simple
 Restart=on-failure
 RestartSec=2
-Type=oneshot
-RemainAfterExit=yes
+
 Environment=GHOST_DISPLAY_NUM=20
 Environment=GHOST_MONITORS=2
 Environment=GHOST_RESOLUTION=1920x1080
@@ -15,7 +15,9 @@ Environment=GHOST_SCALE=1.0
 Environment=GHOST_DPI=96
 Environment=GHOST_LAYOUT=horizontal
 Environment=GHOST_STAY_FOREGROUND=1
-ExecStart=/usr/local/bin/ghost-display-x11
+Environment=GHOST_XORG_LOG=/var/log/ghost-display-20.log
+
+ExecStart=/usr/local/bin/ghost-display-x11 --foreground
 
 [Install]
 WantedBy=multi-user.target
