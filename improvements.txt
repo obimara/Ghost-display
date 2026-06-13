@@ -1,0 +1,253 @@
+Ghost-display improvements
+==========================
+
+Source basis
+------------
+This file summarizes the improvement direction discussed in the Headless display project conversation that is available in this chat context. The focus is Ghost-display itself, not sensor integration.
+
+Core idea
+---------
+Ghost-display should be treated as a general headless graphical workspace provider, not as a RustDesk-only project.
+
+The core project should provide:
+
+- A separate virtual X11 display, normally on :20.
+- Xorg dummy driver based display creation.
+- Logical monitor creation through xrandr --setmonitor.
+- Resolution, monitor count, layout, scale, DPI, and monitor profiles controlled through environment variables.
+- systemd lifecycle management.
+- Debug and verification commands.
+- Tests for dry-run planning, monitor layout, oversized framebuffer protection, and runtime command behavior.
+
+The core project should not depend on:
+
+- GNOME.
+- Wayland.
+- HDMI being connected.
+- A logged-in physical desktop session.
+- RustDesk as a required runtime dependency.
+
+Recommended architecture
+------------------------
+
+Raspberry Pi / Linux system
+
+  normal display stack
+    :0
+    HDMI / GNOME / Wayland / normal desktop if present
+
+  ghost display stack
+    :20
+    Xorg dummy
+    xrandr logical monitors
+    optional lightweight session
+    optional application launchers
+    optional remote desktop adapters
+
+This keeps the Pi normal display behavior untouched while also giving the machine a persistent headless graphical workspace.
+
+Display numbering
+-----------------
+
+Recommended convention:
+
+- :0 for the normal physical or desktop session.
+- :20 for the managed Ghost-display systemd service.
+- :99 for temporary manual/debug sessions.
+
+Ghost-display should never take over :0 by default.
+
+RustDesk should be optional
+---------------------------
+
+RustDesk should be treated as an integration or adapter, not as the identity of the project.
+
+Good structure:
+
+  Ghost-display core
+    ghost-display-x11
+    ghost-display-x11.service
+    ghost-display-debug
+    compare-ghost-profiles
+    tests
+
+  Optional integrations
+    integrations/rustdesk/
+    integrations/vnc/
+    integrations/chromium-kiosk/
+    integrations/generic-app/
+
+The dependency direction should be:
+
+  applications depend on Ghost-display
+  Ghost-display does not depend on applications
+
+Generic app launcher
+--------------------
+
+Add a generic command such as:
+
+  ghost-display-run <command> [args...]
+
+Example behavior:
+
+  DISPLAY=:20 "$@"
+
+Example usage:
+
+  ghost-display-run xterm
+  ghost-display-run chromium-browser --kiosk http://localhost:3000
+  ghost-display-run firefox
+  ghost-display-run rustdesk
+
+This makes RustDesk one possible consumer rather than a required part of the system.
+
+GNOME independent headless session
+----------------------------------
+
+Ghost-display should be able to work on a minimal headless install without GNOME.
+
+Recommended optional packages for a minimal visible session:
+
+  xserver-xorg-core
+  xserver-xorg-video-dummy
+  x11-xserver-utils
+  x11-utils
+  openbox
+  xterm
+
+Add an optional command such as:
+
+  ghost-display-session
+
+Expected behavior:
+
+  Start or verify the Ghost-display X server on :20.
+  Start a lightweight window manager on :20, for example openbox.
+  Start a terminal on :20, for example xterm.
+
+Example manual equivalent:
+
+  DISPLAY=:20 openbox >/tmp/ghost-openbox.log 2>&1 &
+  DISPLAY=:20 xterm -geometry 120x35+80+60 -title "Ghost SSH Terminal" &
+
+This makes it possible to SSH into a fully headless system, start a visible graphical terminal inside the ghost display, and then view that display through any compatible remote desktop tool.
+
+Simple/manual mode
+------------------
+
+Keep the managed service as the main path, but add a simple manual wrapper for debugging.
+
+Possible command:
+
+  ghost-display-simple
+
+Expected behavior:
+
+  GHOST_DISPLAY=:99 \
+  GHOST_MONITORS=1 \
+  GHOST_RESOLUTION=1920x1080 \
+  GHOST_LAYOUT=horizontal \
+  ghost-display-x11 --foreground
+
+This combines the simplicity of a raw dummy Xorg command with the safer layout, validation, DPI, logging, and monitor setup already provided by Ghost-display.
+
+Managed mode
+------------
+
+The main production mode should stay systemd based:
+
+  sudo systemctl enable --now ghost-display-x11.service
+
+Verification:
+
+  DISPLAY=:20 xrandr --listmonitors
+  DISPLAY=:20 xdpyinfo | grep dimensions
+  ghost-display-debug
+
+Auto display selection
+----------------------
+
+The existing RustDesk auto-display behavior is useful but should live as an optional integration.
+
+Concept:
+
+  If a physical display exists and :0 responds, launch the target app on :0.
+  Otherwise launch it on :20.
+
+This concept can also be generalized:
+
+  ghost-display-auto-run <command> [args...]
+
+Possible behavior:
+
+  use :0 when physical display is connected and usable
+  otherwise use :20
+
+Project identity
+----------------
+
+Current identity should evolve from:
+
+  A headless display for RustDesk.
+
+To:
+
+  A managed headless X11 display for Raspberry Pi and Debian-like systems, providing a virtual multi-monitor workspace for remote desktop tools, kiosk apps, browsers, GUI automation, and headless graphical workloads.
+
+Then RustDesk can be described as:
+
+  Optional RustDesk integration is included.
+
+Suggested future file layout
+----------------------------
+
+Ghost-display/
+  install.sh
+  config/
+    ghost-display.conf
+  scripts/
+    ghost-display-x11.sh
+    ghost-display-run.sh
+    ghost-display-session.sh
+    ghost-display-simple.sh
+    ghost-display-debug.sh
+    compare-ghost-profiles.sh
+  integrations/
+    rustdesk/
+      rustdesk-auto-display.sh
+    generic/
+      ghost-display-auto-run.sh
+  systemd/
+    ghost-display-x11.service
+    ghost-display-session.service.example
+    rustdesk-ghost-wrapper.service.example
+  tests/
+    run-ghost-display-tests.sh
+
+Most important design rules
+---------------------------
+
+- Do not modify the normal desktop display configuration by default.
+- Do not use /etc/X11/xorg.conf as a global default.
+- Do not run the ghost display on :0 by default.
+- Do not require GNOME.
+- Do not require RustDesk.
+- Keep the virtual display parallel and isolated.
+- Keep manual debug mode simple.
+- Keep production mode managed by systemd.
+- Make integrations optional and replaceable.
+
+Practical next improvements
+---------------------------
+
+1. Add ghost-display-run for running any command on :20.
+2. Add ghost-display-session for openbox plus xterm on :20.
+3. Add ghost-display-simple for foreground debug use on :99.
+4. Move RustDesk specific logic into an integrations/rustdesk directory.
+5. Update README wording so RustDesk is optional, not central.
+6. Add systemd example for a minimal headless session.
+7. Add tests for the new generic launcher and session scripts.
+8. Keep :20 as the managed default display.
+9. Keep :99 as the simple debug display.
+10. Preserve :0 for the real desktop or physical display.

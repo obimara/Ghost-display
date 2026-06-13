@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fake flock — thin wrapper around real flock if available, else simulate.
+if command -v /usr/bin/flock &>/dev/null; then
+    exec /usr/bin/flock "$@"
+fi
+# Fallback: just succeed (single-process sim doesn't need real locking)
+exec "$@" 2>/dev/null || true

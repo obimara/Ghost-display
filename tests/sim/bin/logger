@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake logger — silently discards. hdmi-switch.sh also echo's so output
+# reaches the redirected switch.log via that path.
+exit 0

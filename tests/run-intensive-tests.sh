@@ -26,28 +26,10 @@ cat /tmp/ghost-display-profile-compare.out
 
 printf '== direct Wayland selector check ==\n'
 fake_drm="$(mktemp -d)"
-fake_runtime="$(mktemp -d)"
-fake_socket_pid=""
-trap '[[ -n "${fake_socket_pid}" ]] && kill "${fake_socket_pid}" >/dev/null 2>&1 || true; rm -rf "${fake_drm}" "${fake_runtime}" /tmp/ghost-display-profile-compare.out' EXIT
+trap 'rm -rf "${fake_drm}" /tmp/ghost-display-profile-compare.out' EXIT
 mkdir -p "${fake_drm}/card0-HDMI-A-1"
 echo connected >"${fake_drm}/card0-HDMI-A-1/status"
-python3 - "${fake_runtime}/wayland-1" <<'PY' &
-import socket
-import sys
-import time
-
-sock = socket.socket(socket.AF_UNIX)
-sock.bind(sys.argv[1])
-sock.listen(1)
-while True:
-    time.sleep(1)
-PY
-fake_socket_pid="$!"
-for _ in {1..50}; do
-    [[ -S "${fake_runtime}/wayland-1" ]] && break
-    sleep 0.02
-done
-choice="$(WAYLAND_DISPLAY=wayland-1 XDG_SESSION_TYPE=wayland XDG_RUNTIME_DIR="${fake_runtime}" RUSTDESK_DRM_DIR="${fake_drm}" scripts/rustdesk-auto-display.sh --print)"
+choice="$(WAYLAND_DISPLAY=wayland-1 XDG_SESSION_TYPE=wayland RUSTDESK_DRM_DIR="${fake_drm}" scripts/rustdesk-auto-display.sh --print)"
 if [[ "${choice}" != "wayland:wayland-1" ]]; then
     echo "Expected wayland:wayland-1, got ${choice}" >&2
     exit 1

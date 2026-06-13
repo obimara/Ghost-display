@@ -1,0 +1,11 @@
+# xorg-dummy.service — DEPRECATED
+# AlwaysX11 v2+ manages the dummy Xorg process directly from hdmi-switch.sh.
+# This unit file is kept for reference / rollback compatibility only.
+# Do NOT enable this unit — it will conflict with the watcher.
+[Unit]
+Description=AlwaysX11 dummy Xorg [DEPRECATED - managed by hdmi-watch.service]
+
+[Service]
+Type=simple
+ExecStart=/bin/true
+RemainAfterExit=no

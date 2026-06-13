@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# tests/sim/bin/x11vnc — fake x11vnc, runs in background until killed
+SIM_LOG="${SIM_LOG:-/tmp/x11vnc-sim.log}"
+echo "x11vnc sim started: $*" >> "$SIM_LOG"
+exec sleep 600
