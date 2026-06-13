@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# tests/sim/bin/systemctl — AlwaysX11 fake systemctl v2
+#
+# State files in $SIM/run/:
+#   dm_active        — exists when DM is running (touch/rm, not state corruption)
+#   switch_count     — total transition count
+#   state            — written by production script only
+#   systemctl.log    — audit log
+#
+# DM unit controlled by DM_SIM env (default: gdm)
+# Fault injection via FAULT_MODE env: flaky_start | slow_start | none
+
+SIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DM_UNIT="${DM_SIM:-gdm}"
+
+# Parse args — strip flags, collect positional
+positional=()
+for arg in "$@"; do
+    case "$arg" in
+        --quiet|-q|--no-pager|--no-legend|--now|--force) ;;
+        *) positional+=("$arg") ;;
+    esac
+done
+ACTION="${positional[0]:-}"
+SERVICE="${positional[1]:-}"
+
+ts()   { date '+%T.%3N'; }
+log()  { echo "$(ts) [systemctl] $*" >> "$SIM/log/systemctl.log"; }
+_norm(){ echo "${1%.service}"; }
+
+FAULT="${FAULT_MODE:-none}"
+_slow()  { [[ "$FAULT" == "slow_start" ]]  && sleep 0.2  || true; }
+_flaky() { [[ "$FAULT" == "flaky_start" ]] && (( RANDOM % 3 == 0 )); }
+
+_inc() {
+    local c; c=$(cat "$SIM/run/switch_count" 2>/dev/null || echo 0)
+    echo $(( c + 1 )) > "$SIM/run/switch_count"
+}
+
+_is_dm() {
+    local u; u="$(_norm "$1")"
+    local dm; dm="$(_norm "$DM_UNIT")"
+    [[ "$u" == "$dm" ]]
+}
+
+case "$ACTION" in
+    cat)
+        # Return 0 only for the simulated DM unit
+        _is_dm "${SERVICE}" && { echo "# simulated $SERVICE"; exit 0; } || exit 1
+        ;;
+
+    is-active)
+        _is_dm "${SERVICE}" || exit 1
+        [[ -f "$SIM/run/dm_active" ]] && exit 0 || exit 1
+        ;;
+
+    is-enabled)
+        _is_dm "${SERVICE}" && { echo "enabled"; exit 0; }
+        echo "disabled"; exit 1
+        ;;
+
+    start)
+        _slow
+        if _flaky; then
+            log "FAULT(flaky): START $SERVICE → injected failure"; exit 1
+        fi
+        if _is_dm "${SERVICE}"; then
+            log "START $SERVICE → dm_active"
+            touch "$SIM/run/dm_active"
+            _inc
+        else
+            log "START $SERVICE (unknown, no-op)"
+        fi
+        ;;
+
+    stop)
+        if _is_dm "${SERVICE}"; then
+            log "STOP $SERVICE → dm inactive"
+            rm -f "$SIM/run/dm_active"
+        else
+            log "STOP $SERVICE (no-op)"
+        fi
+        ;;
+
+    enable|disable)   log "$ACTION $SERVICE (no-op)" ;;
+    daemon-reload)    log "daemon-reload (no-op)" ;;
+    *)                log "IGNORED: $ACTION ${SERVICE}" ;;
+esac
+exit 0

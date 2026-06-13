@@ -1,0 +1,33 @@
+[Unit]
+Description=AlwaysX11 — HDMI hotplug watcher (DM-agnostic)
+Documentation=https://github.com/yourusername/alwaysx11
+# FIX B1: no GDM/SDDM/LightDM hardcoding — works with any or no DM.
+# We only depend on the display-manager.service alias which systemd sets
+# automatically to whichever DM is installed (or is absent entirely).
+After=local-fs.target systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+# If a display manager IS installed, start after it so we can detect it.
+# This is a weak ordering only — we don't fail if no DM is present.
+After=display-manager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hdmi-switch.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=alwaysx11
+
+# Tunable via drop-in: /etc/systemd/system/hdmi-watch.service.d/override.conf
+# or via /etc/alwaysx11/alwaysx11.conf (preferred)
+Environment=POLL_INTERVAL=1
+Environment=STABLE_SECONDS=5
+Environment=LOG_LEVEL=info
+
+# Ensure the script can control system services
+# (must run as root — see install guide for security notes)
+
+[Install]
+WantedBy=multi-user.target

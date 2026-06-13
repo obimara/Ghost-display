@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# tests/sim/bin/Xorg — fake Xorg
+# Creates X lock file (like real Xorg) then sleeps until killed.
+# Also increments switch_count so headless transitions are tracked.
+
+SIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DISPLAY_ARG="${1:-:1}"
+N="${DISPLAY_ARG#:}"
+
+mkdir -p /tmp/.X11-unix 2>/dev/null || true
+echo $$ > "/tmp/.X${N}-lock" 2>/dev/null || true
+# Create a regular file (not socket — tests check -e, not -S)
+touch "/tmp/.X11-unix/X${N}" 2>/dev/null || true
+
+# Increment switch_count so headless→display→headless cycles are fully tracked
+c=$(cat "$SIM/run/switch_count" 2>/dev/null || echo 0)
+echo $(( c + 1 )) > "$SIM/run/switch_count" 2>/dev/null || true
+
+echo "FakeXorg: display=${DISPLAY_ARG} PID=$$" >> "$SIM/log/xorg.log" 2>/dev/null || true
+
+# Clean up on exit
+trap 'rm -f "/tmp/.X${N}-lock" "/tmp/.X11-unix/X${N}" 2>/dev/null; exit 0' TERM INT
+while true; do sleep 0.5; done

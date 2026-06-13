@@ -1,0 +1,16 @@
+2026-03-04 16:49:53 [alwaysx11][info] ══════════════════════════════════════════
+2026-03-04 16:49:53 [alwaysx11][info] AlwaysX11 v3
+2026-03-04 16:49:53 [alwaysx11][info]   DM:     GNOME/GDM (unit: gdm)
+2026-03-04 16:49:53 [alwaysx11][info]   Poll:   0.05s | Stable: 5 ticks
+2026-03-04 16:49:53 [alwaysx11][info]   DRM:    /home/claude/alwaysx11-repo/tests/sim/drm
+2026-03-04 16:49:53 [alwaysx11][info]   Dummy:  :1 | VNC: false
+2026-03-04 16:49:53 [alwaysx11][info] ══════════════════════════════════════════
+2026-03-04 16:49:53 [alwaysx11][info] No HDMI at boot → HEADLESS mode
+2026-03-04 16:49:53 [alwaysx11][info] ── Switching → HEADLESS (dummy on :1) ──
+2026-03-04 16:49:53 [alwaysx11][info] Starting dummy Xorg on :1
+2026-03-04 16:49:53 [alwaysx11][debug] Dummy Xorg PID=23327 on :1
+2026-03-04 16:49:53 [alwaysx11][info] Dummy Xorg ready on :1
+2026-03-04 16:49:53 [alwaysx11][info] ── HEADLESS mode active ──
+2026-03-04 16:49:53 [alwaysx11][debug] Change detected → target=headless (need 5 stable ticks)
+2026-03-04 16:49:54 [alwaysx11][info] AlwaysX11 shutting down
+2026-03-04 16:49:54 [alwaysx11][info] Stopping dummy Xorg PID=23327
