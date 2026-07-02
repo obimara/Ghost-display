@@ -1,0 +1,31 @@
+[Unit]
+Description=Ghost Display v2 - Unified HDMI Hotplug Watcher and Virtual X11 Display
+Documentation=https://github.com/obimara/Ghost-display
+
+# Start after local filesystem and udev are ready
+After=local-fs.target systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+# If a display manager is installed, start after it so we can detect it
+# This is a weak ordering only - we don't fail if no DM is present
+After=display-manager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ghost-display.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ghost-display
+
+# Environment variables (can be overridden in /etc/ghost-display/ghost-display.conf)
+Environment=MODE=combined
+Environment=HDMI_POLL_INTERVAL=1
+Environment=HDMI_STABLE_SECONDS=5
+Environment=LOG_LEVEL=info
+
+# Ensure the script can control system services (must run as root)
+
+[Install]
+WantedBy=multi-user.target
