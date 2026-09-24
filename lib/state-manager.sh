@@ -19,7 +19,7 @@ init_locking() {
     mkdir -p "$RUN_DIR" 2>/dev/null || true
     
     # Open lock file for atomic locking
-    eval "exec $LOCK_FD>\"$LOCK_FILE\""
+    exec 9>"$LOCK_FILE"
     
     # Try to acquire lock
     if ! flock -n $LOCK_FD 2>/dev/null; then
@@ -36,12 +36,13 @@ init_locking() {
 
 # Cleanup on exit
 cleanup() {
+    local status=$?
+    trap - EXIT SIGTERM SIGINT SIGHUP
     logi "Ghost Display shutting down"
     
     # Stop all services
-    if [[ "$MODE" == "virtual" || "$MODE" == "combined" ]]; then
-        virtual_stop
-    fi
+    vnc_stop || true
+    virtual_stop || true
     
     if [[ "$MODE" == "hotplug" || "$MODE" == "combined" ]]; then
         # If we were in display mode, stop DM
@@ -51,14 +52,13 @@ cleanup() {
     fi
     
     # Remove PID and state files
-    rm -f "$PID_FILE" "$STATE_FILE" "$LOCK_FILE"
+    rm -f "$PID_FILE" "$STATE_FILE"
     
     logi "Cleanup complete"
-    exit 0
+    exit "$status"
 }
 
-# Set up signal handlers
-trap cleanup SIGTERM SIGINT SIGHUP
+# Signal handlers are installed by the main script after acquiring the lock.
 
 # =============================================================================
 # STATE MANAGEMENT

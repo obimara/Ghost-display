@@ -46,6 +46,26 @@ Ghost Display v2 is a **complete merge** of:
 
 ---
 
+## Reliability checks
+
+Run `bash tests/run-intensive-tests.sh` from the checkout. This checks Bash syntax
+for every shell script and runs isolated regressions for monitor profiles, startup
+failure, process cleanup, configuration validation, locking and display selection.
+ShellCheck runs when installed. These are simulated checks, not Raspberry Pi
+hardware certification.
+
+The v2 installer is `scripts/install-ghost-display.sh`; `install.sh` installs the
+separate X11-only service. Do not enable both for the same X display. The shared
+`config/20-ghost-display.conf` allows up to 8192×8192; the default logical layout
+remains two 1920×1080 monitors. A bare dummy X server does not create a desktop
+session: desktop login, X authorization and RustDesk capture must also work on the
+Pi. The dummy driver does not itself provide GPU acceleration.
+
+When VNC is enabled without a password file, it listens only on localhost.
+`rustdesk-auto-display` preserves an existing physical Wayland session; selecting
+the ghost display clears Wayland variables for the launched X11 process. This
+selector does not create a Wayland session or grant capture permissions.
+
 ## 🚀 Quick Start
 
 ### Installation

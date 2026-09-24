@@ -26,7 +26,7 @@ vnc_start() {
     # FIX B5 from AlwaysX11: use -pidfile so we get the real x11vnc PID
     local args=(
         -display "${VIRTUAL_DISPLAY}"
-        -port "${VNC_PORT}"
+        -rfbport "${VNC_PORT}"
         -forever
         -shared
         -noxdamage
@@ -39,8 +39,8 @@ vnc_start() {
     if [[ -f "${VNC_PASSWD_FILE}" ]]; then
         args+=(-rfbauth "${VNC_PASSWD_FILE}")
     else
-        args+=(-nopw)
-        logw "No VNC password file at ${VNC_PASSWD_FILE} - using no password"
+        args+=(-localhost -nopw)
+        logw "No VNC password file at ${VNC_PASSWD_FILE} - restricting unauthenticated VNC to localhost"
     fi
     
     # Start x11vnc
@@ -64,14 +64,11 @@ vnc_stop() {
     if [[ -f "$VNC_PID_FILE" ]]; then
         local pid
         pid=$(cat "$VNC_PID_FILE" 2>/dev/null || echo "")
-        if [[ -n "$pid" ]]; then
+        if [[ "$pid" =~ ^[1-9][0-9]*$ ]] && [[ -r "/proc/$pid/comm" ]] && [[ "$(<"/proc/$pid/comm")" == "x11vnc" ]]; then
             kill -TERM "$pid" 2>/dev/null || true
         fi
         rm -f "$VNC_PID_FILE"
     fi
-    
-    # Also kill any x11vnc processes for this display
-    pkill -f "x11vnc.*${VIRTUAL_DISPLAY}" 2>/dev/null || true
     
     logd "x11vnc stopped"
     return 0

@@ -21,7 +21,7 @@ is_positive_number() {
 scale_pixels() {
     local pixels="$1"
     local scale="$2"
-    awk -v pixels="${pixels}" -v scale="${scale}" 'BEGIN { printf "%d", (pixels * scale) + 0.5 }'
+    awk -v pixels="${pixels}" -v scale="${scale}" 'BEGIN { value = int(pixels * scale + 0.5); if (!(value >= 1 && value <= 32767)) exit 1; printf "%d", value }'
 }
 
 pixels_to_mm() {
@@ -61,6 +61,26 @@ declare FRAMEBUFFER_HEIGHT=0
 
 build_monitor_specs() {
     local raw_specs=()
+    local parsed i
+    if ! is_positive_int "${VIRTUAL_MONITORS}" || (( ${#VIRTUAL_MONITORS} > 2 )) || (( VIRTUAL_MONITORS > 64 )); then
+        loge "VIRTUAL_MONITORS must be between 1 and 64."
+        return 1
+    fi
+    if ! is_positive_number "${VIRTUAL_DPI}" || ! awk -v dpi="${VIRTUAL_DPI}" 'BEGIN { exit !(dpi >= 1 && dpi <= 10000) }'; then
+        loge "VIRTUAL_DPI must be between 1 and 10000."
+        return 1
+    fi
+    if [[ "${VIRTUAL_LAYOUT}" != horizontal && "${VIRTUAL_LAYOUT}" != vertical ]]; then
+        loge "VIRTUAL_LAYOUT must be horizontal or vertical."
+        return 1
+    fi
+    local limit
+    for limit in "${VIRTUAL_MAX_WIDTH}" "${VIRTUAL_MAX_HEIGHT}"; do
+        if ! is_positive_int "$limit" || (( ${#limit} > 5 )) || (( limit > 32767 )); then
+            loge "Framebuffer limits must be between 1 and 32767."
+            return 1
+        fi
+    done
     local base_width
     local base_height
     local spec
@@ -86,9 +106,18 @@ build_monitor_specs() {
     MONITOR_Y=()
 
     if [[ -n "${VIRTUAL_MONITOR_SPECS}" ]]; then
+        if [[ "${VIRTUAL_MONITOR_SPECS}" == *, ]]; then
+            loge "Empty monitor specification."
+            return 1
+        fi
         IFS=',' read -r -a raw_specs <<<"${VIRTUAL_MONITOR_SPECS}"
+        if (( ${#raw_specs[@]} > 64 )); then
+            loge "At most 64 virtual monitors are supported."
+            return 1
+        fi
     else
-        read -r base_width base_height <<<"$(parse_resolution "${VIRTUAL_RESOLUTION}")" || return 1
+        parsed="$(parse_resolution "${VIRTUAL_RESOLUTION}")" || return 1
+        read -r base_width base_height <<<"$parsed"
         for ((i = 1; i <= VIRTUAL_MONITORS; i++)); do
             raw_specs+=("${base_width}x${base_height}@${VIRTUAL_SCALE}")
         done
@@ -105,15 +134,19 @@ build_monitor_specs() {
             spec_scale="${VIRTUAL_SCALE}"
         fi
 
-        read -r width height <<<"$(parse_resolution "${spec_resolution}")" || return 1
+        parsed="$(parse_resolution "${spec_resolution}")" || return 1
+        read -r width height <<<"$parsed"
 
         if ! is_positive_number "${spec_scale}"; then
             loge "Invalid scale '${spec_scale}' in VIRTUAL_MONITOR_SPECS."
             return 1
         fi
 
-        effective_width="$(scale_pixels "${width}" "${spec_scale}")"
-        effective_height="$(scale_pixels "${height}" "${spec_scale}")"
+        if ! effective_width="$(scale_pixels "${width}" "${spec_scale}")" ||
+           ! effective_height="$(scale_pixels "${height}" "${spec_scale}")"; then
+            loge "Scaled monitor dimensions must be between 1 and 32767 pixels."
+            return 1
+        fi
         mm_width="$(pixels_to_mm "${effective_width}" "${VIRTUAL_DPI}")"
         mm_height="$(pixels_to_mm "${effective_height}" "${VIRTUAL_DPI}")"
 
@@ -177,14 +210,21 @@ print_virtual_plan() {
 
 # Check if Xorg is running for the virtual display
 virtual_is_xorg_running() {
-    if [[ -f "${DUMMY_PID_FILE}" ]]; then
-        local pid
-        pid=$(cat "${DUMMY_PID_FILE}" 2>/dev/null || echo "")
-        [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && return 0
-    fi
-    
-    # Fallback: check for Xorg process with our display
-    pgrep -f "Xorg ${VIRTUAL_DISPLAY} .*${DUMMY_XORG_CONF}" >/dev/null 2>&1
+    [[ -f "${DUMMY_PID_FILE}" ]] || return 1
+    local pid arg display_found=0 config_found=0 previous=""
+    pid=$(cat "${DUMMY_PID_FILE}") || return 1
+    [[ "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/cmdline" ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    local -a args=()
+    mapfile -d '' -t args < "/proc/$pid/cmdline" 2>/dev/null || return 1
+    (( ${#args[@]} > 0 )) || return 1
+    [[ "${args[0]##*/}" == Xorg || "${args[0]}" == "${XORG_BIN}" ]] || return 1
+    for arg in "${args[@]:1}"; do
+        [[ "$arg" == "${VIRTUAL_DISPLAY}" ]] && display_found=1
+        [[ "$previous" == -config && "$arg" == "${DUMMY_XORG_CONF}" ]] && config_found=1
+        previous="$arg"
+    done
+    (( display_found && config_found ))
 }
 
 # Wait for Xorg to become ready
@@ -207,21 +247,15 @@ virtual_wait_for_xorg() {
 
 # Start Xorg for virtual display
 virtual_start_xorg() {
-    # Remove stale lock whose owner is dead (FIX B7 from AlwaysX11)
-    local n="${VIRTUAL_DISPLAY#:}"
-    local lock="/tmp/.X${n}-lock"
-    local sock="/tmp/.X11-unix/X${n}"
-    
-    if [[ -f "$lock" ]]; then
-        local op=""
-        read -r op < "$lock" 2>/dev/null || op=""
-        op="${op// /}"
-        if [[ -n "$op" ]] && ! kill -0 "$op" 2>/dev/null; then
-            logd "Removing stale X lock $lock (PID $op gone)"
-            rm -f "$lock" "$sock"
-        fi
+    if virtual_is_xorg_running; then
+        logi "Xorg already running on ${VIRTUAL_DISPLAY}"
+        return 0
     fi
-    
+    if DISPLAY="${VIRTUAL_DISPLAY}" xset q >/dev/null 2>&1; then
+        loge "Display ${VIRTUAL_DISPLAY} is already in use by an unmanaged server."
+        return 1
+    fi
+    # Xorg manages its own locks; never unlink another server's socket.
     # Ensure Xorg config exists
     if [[ ! -f "$DUMMY_XORG_CONF" ]]; then
         loge "Xorg config missing: $DUMMY_XORG_CONF"
@@ -229,30 +263,25 @@ virtual_start_xorg() {
     fi
     
     # Ensure log directory exists (FIX B4 from AlwaysX11)
-    mkdir -p "$XORG_LOG_DIR" 2>/dev/null || true
+    mkdir -p "$XORG_LOG_DIR" || return 1
     local xlog="${XORG_LOG_DIR}/xorg-dummy.log"
     
     # Start Xorg
     logi "Starting Xorg on ${VIRTUAL_DISPLAY}"
     "${XORG_BIN}" "${VIRTUAL_DISPLAY}" \
         -config "${DUMMY_XORG_CONF}" \
-        -nolisten tcp \
+        -noreset -nolisten tcp \
         -logfile "${xlog}" \
         >/dev/null 2>&1 &
     
-    echo $! > "$DUMMY_PID_FILE"
-    logd "Xorg PID=$(cat "$DUMMY_PID_FILE") on ${VIRTUAL_DISPLAY}"
-    
-    # Wait for X lock file (FIX B3 from AlwaysX11 - no xdpyinfo dep)
-    local i=0
-    while (( i < 40 )); do
-        [[ -e "/tmp/.X${n}-lock" ]] && { logi "Xorg ready on ${VIRTUAL_DISPLAY}"; break; }
-        sleep 0.1
-        i=$((i + 1))
-    done
-    
-    [[ -e "/tmp/.X${n}-lock" ]] || logw "Xorg: lock not found within 4s (may still be starting)"
-    
+    local pid=$!
+    if ! printf '%s\n' "$pid" > "$DUMMY_PID_FILE"; then
+        kill -TERM "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        return 1
+    fi
+    logd "Xorg PID=$pid on ${VIRTUAL_DISPLAY}"
+
     return 0
 }
 
@@ -261,46 +290,45 @@ virtual_stop_xorg() {
     if [[ -f "$DUMMY_PID_FILE" ]]; then
         local pid
         pid=$(cat "$DUMMY_PID_FILE" 2>/dev/null || echo "")
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+        if virtual_is_xorg_running; then
             logi "Stopping Xorg PID=$pid"
             kill -TERM "$pid" 2>/dev/null || true
             local i=0
             while (( i < 40 )); do
-                kill -0 "$pid" 2>/dev/null || break
+                virtual_is_xorg_running || break
                 sleep 0.1
                 i=$((i + 1))
             done
-            kill -0 "$pid" 2>/dev/null && { kill -KILL "$pid" 2>/dev/null || true; }
+            if virtual_is_xorg_running; then
+                kill -KILL "$pid" 2>/dev/null || true
+            fi
         fi
         rm -f "$DUMMY_PID_FILE"
     fi
     
-    local n="${VIRTUAL_DISPLAY#:}"
-    rm -f "/tmp/.X${n}-lock" "/tmp/.X11-unix/X${n}" 2>/dev/null || true
+    # Let Xorg remove the lock and socket it owns.
 }
 
 # Configure monitors using xrandr
 virtual_configure_monitors() {
-    DISPLAY="${VIRTUAL_DISPLAY}" xrandr --fb "${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT}" 2>/dev/null || true
-
-    # Remove existing ghost monitors
+    local listing monitor_name i
+    DISPLAY="${VIRTUAL_DISPLAY}" xrandr --fb "${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT}" || return 1
+    listing=$(DISPLAY="${VIRTUAL_DISPLAY}" xrandr --listmonitors) || return 1
     while read -r monitor_name; do
         [[ "${monitor_name}" == "${VIRTUAL_NAME_PREFIX}-"* ]] || continue
-        DISPLAY="${VIRTUAL_DISPLAY}" xrandr --delmonitor "${monitor_name}" >/dev/null 2>&1 || true
-    done < <(
-        DISPLAY="${VIRTUAL_DISPLAY}" xrandr --listmonitors 2>/dev/null |\n        awk 'NR > 1 { name = $2; sub(/^\+\*/, "", name); sub(/^\+/, "", name); sub(/^\*/, "", name); print name }'
-    )
+        DISPLAY="${VIRTUAL_DISPLAY}" xrandr --delmonitor "${monitor_name}" || return 1
+    done < <(awk 'NR > 1 { name = $2; sub(/^[+*]+/, "", name); print name }' <<<"$listing")
 
     # Add new monitors
     for i in "${!MONITOR_NAMES[@]}"; do
         DISPLAY="${VIRTUAL_DISPLAY}" xrandr --setmonitor \
             "${MONITOR_NAMES[i]}" \
             "${MONITOR_WIDTHS[i]}/${MONITOR_MM_WIDTHS[i]}x${MONITOR_HEIGHTS[i]}/${MONITOR_MM_HEIGHTS[i]}+${MONITOR_X[i]}+${MONITOR_Y[i]}" \
-            none 2>/dev/null || true
+            none || return 1
     done
 
     # Set DPI
-    printf 'Xft.dpi: %s\n' "${VIRTUAL_DPI}" | DISPLAY="${VIRTUAL_DISPLAY}" xrdb -merge 2>/dev/null || true
+    printf 'Xft.dpi: %s\n' "${VIRTUAL_DPI}" | DISPLAY="${VIRTUAL_DISPLAY}" xrdb -merge || return 1
     
     logi "Virtual monitors configured successfully"
 }
@@ -340,7 +368,7 @@ virtual_start() {
     print_virtual_plan
     
     # Check for required commands
-    for cmd in Xorg xrandr xset xrdb; do
+    for cmd in "${XORG_BIN}" xrandr xset xrdb; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             loge "Missing required command: $cmd"
             return 1
@@ -353,6 +381,9 @@ virtual_start() {
         return 1
     fi
     
+    # Preserve an existing managed server if reconfiguration fails.
+    local already_running=0
+    virtual_is_xorg_running && already_running=1
     # Start Xorg
     if ! virtual_start_xorg; then
         loge "Failed to start Xorg"
@@ -362,14 +393,14 @@ virtual_start() {
     # Wait for Xorg to be ready
     if ! virtual_wait_for_xorg; then
         loge "Xorg did not become ready"
-        virtual_stop_xorg
+        (( already_running )) || virtual_stop_xorg
         return 1
     fi
     
     # Configure monitors
     if ! virtual_configure_monitors; then
         loge "Failed to configure monitors"
-        virtual_stop_xorg
+        (( already_running )) || virtual_stop_xorg
         return 1
     fi
     

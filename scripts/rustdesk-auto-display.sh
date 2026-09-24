@@ -25,7 +25,7 @@ physical_connector_connected() {
         ;;
     esac
 
-    state="$(cat "${status}" 2>/dev/null || true)"
+    IFS= read -r state <"${status}" 2>/dev/null || continue
 
     if [[ "${state}" == "connected" ]]; then
       return 0
@@ -46,7 +46,9 @@ display_ready() {
 }
 
 choose_display() {
-  if physical_connector_connected && display_ready "${PHYSICAL_DISPLAY}"; then
+  if physical_connector_connected && [[ "${XDG_SESSION_TYPE:-}" == "wayland" && -n "${WAYLAND_DISPLAY:-}" ]]; then
+    printf 'wayland:%s\n' "$WAYLAND_DISPLAY"
+  elif physical_connector_connected && display_ready "${PHYSICAL_DISPLAY}"; then
     printf '%s\n' "${PHYSICAL_DISPLAY}"
   else
     printf '%s\n' "${GHOST_DISPLAY}"
@@ -58,7 +60,12 @@ if [[ "${1:-}" == "--print" ]]; then
   exit 0
 fi
 
-export DISPLAY="$(choose_display)"
+selected_display="$(choose_display)"
+if [[ "$selected_display" != wayland:* ]]; then
+  export DISPLAY="$selected_display"
+  unset WAYLAND_DISPLAY
+  export XDG_SESSION_TYPE=x11
+fi
 
 if [[ $# -eq 0 ]]; then
   set -- rustdesk

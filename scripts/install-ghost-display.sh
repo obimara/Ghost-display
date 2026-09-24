@@ -44,6 +44,8 @@ BACKUP_DIR="/var/lib/ghost-display/backups"
 INST_DIR="/etc/ghost-display"
 LIB_DIR="/usr/local/lib/ghost-display"
 BIN_DIR="/usr/local/bin"
+XORG_LOG_DIR="/var/log/ghost-display"
+RUN_DIR="/run/ghost-display"
 
 # =============================================================================
 # LOGGING FUNCTIONS
@@ -150,7 +152,7 @@ done
 log "Installing required packages..."
 
 # Install dummy Xorg driver
-apt-get install -y xserver-xorg-video-dummy
+apt-get install -y xserver-xorg-core xserver-xorg-video-dummy x11-xserver-utils x11-utils xxd
 
 # Install x11vnc if requested
 if $ENABLE_VNC; then
@@ -274,6 +276,9 @@ for lib_file in "${REPO_ROOT}/lib/"*.sh; do
     fi
 done
 
+# Keep rollback available after the source checkout is removed.
+install -Dm755 "${BASH_SOURCE[0]}" "$LIB_DIR/scripts/install-ghost-display.sh"
+
 # Install main script
 install -Dm755 "${REPO_ROOT}/ghost-display.sh" "${BIN_DIR}/ghost-display.sh"
 log "  Installed: ghost-display.sh"
@@ -293,7 +298,7 @@ else
 fi
 
 # Install Xorg config
-install -Dm644 "${REPO_ROOT}/x11/ghost-display.conf" "$INST_DIR/xorg-dummy.conf"
+install -Dm644 "${REPO_ROOT}/config/20-ghost-display.conf" "$INST_DIR/xorg-dummy.conf"
 log "  Installed: xorg-dummy.conf"
 
 # Install systemd service

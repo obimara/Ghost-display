@@ -70,9 +70,6 @@ RUSTDESK_OPTIMIZED="${RUSTDESK_OPTIMIZED:-true}"
 # LOAD CONFIGURATION FILE
 # =============================================================================
 load_config() {
-    # Create directories if they don't exist
-    mkdir -p "$RUN_DIR" "$XORG_LOG_DIR" "$(dirname "$CONF_FILE")" 2>/dev/null || true
-    
     # Load config file if it exists
     if [[ -f "$CONF_FILE" ]]; then
         # shellcheck source=/dev/null
@@ -82,14 +79,11 @@ load_config() {
     # Also check for old AlwaysX11 config for backward compatibility
     local OLD_CONF="/etc/alwaysx11/alwaysx11.conf"
     if [[ -f "$OLD_CONF" ]] && [[ ! -f "$CONF_FILE" ]]; then
-        logw "Found old AlwaysX11 config at $OLD_CONF, migrating to $CONF_FILE"
-        mkdir -p "$(dirname "$CONF_FILE")"
-        cp "$OLD_CONF" "$CONF_FILE"
-        # Convert old variable names to new ones
-        sed -i 's/^DUMMY_DISPLAY=/VIRTUAL_DISPLAY=/g' "$CONF_FILE"
-        sed -i 's/^DUMMY_XORG_CONF=/XORG_DUMMY_CONF=/g' "$CONF_FILE"
-        # shellcheck source=/dev/null
-        source "$CONF_FILE"
+        logw "Using legacy configuration at $OLD_CONF"
+        # Read without migrating files, including during --dry-run.
+        source "$OLD_CONF"
+        VIRTUAL_DISPLAY_NUM="${DUMMY_DISPLAY:-$VIRTUAL_DISPLAY_NUM}"
+        VIRTUAL_DISPLAY_NUM="${VIRTUAL_DISPLAY_NUM#:}"
     fi
     
     # Apply environment variable overrides (GHOST_* takes precedence)
@@ -129,12 +123,12 @@ validate_config() {
     fi
     
     # Validate numbers
-    if ! [[ "$HDMI_POLL_INTERVAL" =~ ^[0-9]+$ ]]; then
+    if ! [[ "$HDMI_POLL_INTERVAL" =~ ^[1-9][0-9]*$ ]]; then
         loge "POLL_INTERVAL must be a positive integer: '$HDMI_POLL_INTERVAL'"
         exit 1
     fi
     
-    if ! [[ "$HDMI_STABLE_SECONDS" =~ ^[0-9]+$ ]]; then
+    if ! [[ "$HDMI_STABLE_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
         loge "STABLE_SECONDS must be a positive integer: '$HDMI_STABLE_SECONDS'"
         exit 1
     fi

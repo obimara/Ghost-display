@@ -22,13 +22,14 @@ write_mock_commands() {
     cat >"${MOCK_BIN}/Xorg" <<'MOCK'
 #!/usr/bin/env bash
 printf 'Xorg %s\n' "$*" >>"${GHOST_TEST_LOG}"
-while true; do sleep 1; done
+printf '%s\n' "$$" >"${XDG_RUNTIME_DIR}/mock-xorg.pid"
+exec sleep 60
 MOCK
 
     cat >"${MOCK_BIN}/xset" <<'MOCK'
 #!/usr/bin/env bash
 printf 'xset %s DISPLAY=%s\n' "$*" "${DISPLAY:-}" >>"${GHOST_TEST_LOG}"
-exit 0
+[[ -f "${XDG_RUNTIME_DIR}/mock-xorg.pid" ]] && kill -0 "$(cat "${XDG_RUNTIME_DIR}/mock-xorg.pid")" 2>/dev/null
 MOCK
 
     cat >"${MOCK_BIN}/xrandr" <<'MOCK'
