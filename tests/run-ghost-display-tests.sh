@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${ROOT_DIR}/scripts/ghost-display-x11.sh"
-CONFIG="${ROOT_DIR}/config/20-ghost-display.conf"
+CONFIG="${ROOT_DIR}/x11/xorg-dummy.conf"
 TMP_DIR="$(mktemp -d)"
 MOCK_BIN="${TMP_DIR}/bin"
 LOG_FILE="${TMP_DIR}/commands.log"
@@ -128,7 +128,7 @@ GHOST_DPI=110 \
 "${SCRIPT}" >"${TMP_DIR}/runtime.out"
 
 assert_contains "${TMP_DIR}/runtime.out" "framebuffer=5120x1800"
-assert_contains "${LOG_FILE}" "Xorg :20 -config ${CONFIG} -noreset +extension RANDR -logfile /tmp/ghost-display-20.log"
+assert_contains "${LOG_FILE}" "Xorg :20 -config ${CONFIG} -noreset -nolisten tcp +extension RANDR -logfile /tmp/ghost-display-20.log"
 assert_contains "${LOG_FILE}" "xrandr --fb 5120x1800 DISPLAY=:20"
 assert_contains "${LOG_FILE}" "xrandr --delmonitor Ghost-1 DISPLAY=:20"
 assert_contains "${LOG_FILE}" "xrandr --delmonitor Ghost-2 DISPLAY=:20"
@@ -146,5 +146,27 @@ assert_contains "${compare_out}" "mixed-workspace  4480x1440"
 assert_contains "${compare_out}" "vertical-triple  1280x2160"
 assert_contains "${compare_out}" "+8.9"
 assert_contains "${compare_out}" "Use balanced-dual as the finished profile"
+
+# Generic launchers preserve argv and select the expected display.
+launcher_out="${TMP_DIR}/launcher.out"
+"${ROOT_DIR}/scripts/ghost-display-run.sh" --display :42 bash -c \
+  'printf "%s|%s|%s\n" "$DISPLAY" "$1" "$2"' _ 'argument with spaces' '*.txt' >"${launcher_out}"
+assert_contains "${launcher_out}" ':42|argument with spaces|*.txt'
+
+mkdir -p "${TMP_DIR}/drm/card0-HDMI-A-1"
+printf 'connected\n' >"${TMP_DIR}/drm/card0-HDMI-A-1/status"
+auto_out="${TMP_DIR}/auto.out"
+GHOST_DRM_DIR="${TMP_DIR}/drm" GHOST_SKIP_X_CHECK=1 \
+  "${ROOT_DIR}/scripts/ghost-display-auto-run.sh" --print >"${auto_out}"
+assert_contains "${auto_out}" ':0'
+printf 'disconnected\n' >"${TMP_DIR}/drm/card0-HDMI-A-1/status"
+GHOST_DRM_DIR="${TMP_DIR}/drm" GHOST_SKIP_X_CHECK=1 \
+  "${ROOT_DIR}/scripts/ghost-display-auto-run.sh" --print >"${auto_out}"
+assert_contains "${auto_out}" ':20'
+
+# Installer inputs must remain valid repository paths.
+[[ -f "${ROOT_DIR}/x11/xorg-dummy.conf" ]]
+assert_contains "${ROOT_DIR}/install.sh" '${ROOT_DIR}/x11/xorg-dummy.conf'
+assert_contains "${ROOT_DIR}/scripts/install-ghost-display.sh" '${REPO_ROOT}/x11/xorg-dummy.conf'
 
 printf 'All ghost-display tests passed.\n'

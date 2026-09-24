@@ -129,24 +129,24 @@ validate_config() {
     fi
     
     # Validate numbers
-    if ! [[ "$HDMI_POLL_INTERVAL" =~ ^[0-9]+$ ]]; then
+    if ! [[ "$HDMI_POLL_INTERVAL" =~ ^[1-9][0-9]*$ ]]; then
         loge "POLL_INTERVAL must be a positive integer: '$HDMI_POLL_INTERVAL'"
         exit 1
     fi
     
-    if ! [[ "$HDMI_STABLE_SECONDS" =~ ^[0-9]+$ ]]; then
+    if ! [[ "$HDMI_STABLE_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
         loge "STABLE_SECONDS must be a positive integer: '$HDMI_STABLE_SECONDS'"
         exit 1
     fi
     
     # Validate virtual display settings if in virtual or combined mode
     if [[ "$MODE" == "virtual" || "$MODE" == "combined" ]]; then
-        if ! [[ "$VIRTUAL_DISPLAY_NUM" =~ ^[0-9]+$ ]]; then
+        if ! [[ "$VIRTUAL_DISPLAY_NUM" =~ ^[1-9][0-9]*$ ]]; then
             loge "VIRTUAL_DISPLAY_NUM must be a positive integer: '$VIRTUAL_DISPLAY_NUM'"
             exit 1
         fi
         
-        if ! [[ "$VIRTUAL_MONITORS" =~ ^[0-9]+$ ]]; then
+        if ! [[ "$VIRTUAL_MONITORS" =~ ^[1-9][0-9]*$ ]]; then
             loge "VIRTUAL_MONITORS must be a positive integer: '$VIRTUAL_MONITORS'"
             exit 1
         fi

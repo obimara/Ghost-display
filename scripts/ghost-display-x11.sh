@@ -25,7 +25,7 @@ usage() {
   cat <<'USAGE'
 Usage: ghost-display-x11 [--dry-run] [--foreground]
 
-Starts an Xorg dummy display and exposes logical XRandR monitors for RustDesk.
+Starts an isolated Xorg dummy display and exposes logical XRandR monitors.
 
 Environment options:
   GHOST_DISPLAY_NUM=20
@@ -246,6 +246,7 @@ print_plan() {
   echo "Ghost X11 display plan"
   echo "  DISPLAY=${DISPLAY_NAME}"
   echo "  config=${CONFIG_FILE}"
+  echo "  log=${LOG_FILE}"
   echo "  framebuffer=${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT}"
   echo "  dpi=${DPI}"
 
@@ -282,6 +283,7 @@ start_xorg_background() {
   Xorg "${DISPLAY_NAME}" \
     -config "${CONFIG_FILE}" \
     -noreset \
+    -nolisten tcp \
     +extension RANDR \
     -logfile "${LOG_FILE}" \
     >/dev/null 2>&1 &
@@ -301,6 +303,7 @@ start_xorg_foreground() {
   Xorg "${DISPLAY_NAME}" \
     -config "${CONFIG_FILE}" \
     -noreset \
+    -nolisten tcp \
     +extension RANDR \
     -logfile "${LOG_FILE}" \
     >/dev/null 2>&1 &
@@ -313,7 +316,7 @@ start_xorg_foreground() {
   wait_for_xorg
   configure_monitors
   print_plan
-  echo "RustDesk should be started with DISPLAY=${DISPLAY_NAME}."
+  echo "Run applications with: ghost-display-run <command> [args...]"
 
   wait "${xorg_pid}"
 }
@@ -366,7 +369,7 @@ main() {
   start_xorg_background
   configure_monitors
   print_plan
-  echo "RustDesk should be started with DISPLAY=${DISPLAY_NAME}."
+  echo "Run applications with: ghost-display-run <command> [args...]"
 }
 
 main "$@"

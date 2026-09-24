@@ -1,12 +1,37 @@
 # Ghost Display v2
 
-**Unified Virtual X11 Display and HDMI Hotplug Manager for Raspberry Pi 5**
+**Managed headless X11 workspace and optional HDMI hotplug manager for Raspberry Pi 5 and Debian-like systems**
 
-Ghost Display v2 combines the best of **AlwaysX11** and **Ghost-display-x11** into a single, powerful solution that:
-- Creates **persistent virtual X11 displays** for RustDesk and other remote desktop tools
+Ghost Display provides an application-independent graphical workspace that:
+- Creates a **persistent, isolated virtual X11 display** for remote desktops, kiosks, browsers, GUI automation, and other graphical tools
 - **Monitors HDMI hotplug** events to automatically switch between physical and virtual displays
 - Works **seamlessly with any display manager** (GDM, SDDM, LightDM, etc.) or in headless mode
 - Provides a **"ghost" display** that's always available, even when no physical monitor is connected
+
+RustDesk and VNC are optional consumers. The core display does not require either one,
+GNOME, Wayland, an HDMI connection, or a logged-in physical desktop session.
+
+## Architecture
+
+```mermaid
+flowchart TD
+  operator((Operator)) -->|invokes| cli[ghost-display.sh]
+  systemd[systemd] --> service[ghost-display.service] -->|runs| cli
+  cli -->|loads| loader[config-loader.sh] --> config[ghost-display.conf]
+  cli -->|orchestrates| virtual[x11-virtual.sh]
+  cli -->|reads state from| hdmi[hdmi-monitor.sh]
+  cli -->|controls| dm[dm-manager.sh]
+  cli -->|tracks lifecycle| state[state-manager.sh]
+  cli -->|writes events| logging[logging.sh]
+  cli -->|optionally starts| vnc[vnc-manager.sh] -->|serves :20| virtual
+  virtual -->|uses| xorg[xorg-dummy.conf]
+  apps((GUI applications / remote desktop)) -->|use DISPLAY=:20| virtual
+  installer[Installer] -->|converts and installs| edid[EDID firmware]
+  edid -->|advertises connector through kernel DRM| hdmi
+```
+
+The normal physical desktop remains on `:0`, the managed ghost workspace defaults
+to `:20`, and the manual debugging wrapper defaults to `:99`.
 
 ---
 
@@ -83,6 +108,30 @@ DISPLAY=:20 rustdesk
 
 # Or create a desktop shortcut with:
 # Exec=env DISPLAY=:20 rustdesk
+```
+
+### Running any graphical application
+
+Use the generic launcher instead of coupling an application to the service:
+
+```bash
+ghost-display-run xterm
+ghost-display-run chromium-browser --kiosk https://example.com
+ghost-display-run rustdesk
+```
+
+To prefer a usable physical display and fall back to the ghost workspace:
+
+```bash
+ghost-display-auto-run firefox
+```
+
+For manual debugging, start a single-monitor workspace on the reserved `:99`
+display. Environment variables can still override its defaults:
+
+```bash
+ghost-display-simple
+GHOST_RESOLUTION=2560x1440 ghost-display-simple
 ```
 
 ---

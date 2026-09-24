@@ -79,9 +79,12 @@ install_optional_script() {
 }
 
 install_files() {
-  install -D -m 0644 "${ROOT_DIR}/config/20-ghost-display.conf" /etc/X11/ghost-display.conf
+  install -D -m 0644 "${ROOT_DIR}/x11/xorg-dummy.conf" /etc/X11/ghost-display.conf
   install -D -m 0755 "${ROOT_DIR}/scripts/ghost-display-x11.sh" /usr/local/bin/ghost-display-x11
   install -D -m 0755 "${ROOT_DIR}/scripts/rustdesk-auto-display.sh" /usr/local/bin/rustdesk-auto-display
+  install -D -m 0755 "${ROOT_DIR}/scripts/ghost-display-run.sh" /usr/local/bin/ghost-display-run
+  install -D -m 0755 "${ROOT_DIR}/scripts/ghost-display-auto-run.sh" /usr/local/bin/ghost-display-auto-run
+  install -D -m 0755 "${ROOT_DIR}/scripts/ghost-display-simple.sh" /usr/local/bin/ghost-display-simple
   install -D -m 0644 "${ROOT_DIR}/systemd/${SERVICE_NAME}" "/etc/systemd/system/${SERVICE_NAME}"
 
   install_optional_script "${ROOT_DIR}/scripts/compare-ghost-profiles.sh" /usr/local/bin/compare-ghost-profiles
@@ -166,7 +169,7 @@ print_done() {
   echo "Runtime: /usr/local/bin/ghost-display-x11"
   echo "Service: ${SERVICE_NAME}"
   echo "Verify: DISPLAY=:20 xrandr --listmonitors"
-  echo "Run RustDesk with: DISPLAY=:20 rustdesk"
+  echo "Run an application with: ghost-display-run <command> [args...]"
 }
 
 main() {

@@ -293,7 +293,7 @@ else
 fi
 
 # Install Xorg config
-install -Dm644 "${REPO_ROOT}/x11/ghost-display.conf" "$INST_DIR/xorg-dummy.conf"
+install -Dm644 "${REPO_ROOT}/x11/xorg-dummy.conf" "$INST_DIR/xorg-dummy.conf"
 log "  Installed: xorg-dummy.conf"
 
 # Install systemd service

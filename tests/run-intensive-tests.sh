@@ -7,6 +7,9 @@ cd "${ROOT_DIR}"
 scripts=(
     install.sh
     scripts/ghost-display-x11.sh
+    scripts/ghost-display-run.sh
+    scripts/ghost-display-auto-run.sh
+    scripts/ghost-display-simple.sh
     scripts/compare-ghost-profiles.sh
     scripts/debug-ghost-display.sh
     scripts/rustdesk-auto-display.sh
