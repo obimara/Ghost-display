@@ -153,10 +153,8 @@ activate_service() {
   systemctl daemon-reload
 
   if [[ "${START_SERVICE}" == "1" ]]; then
-    systemctl enable --now "${SERVICE_NAME}"
-    systemctl restart "${SERVICE_NAME}"
-  else
     systemctl enable "${SERVICE_NAME}"
+    systemctl restart "${SERVICE_NAME}"
   fi
 }
 

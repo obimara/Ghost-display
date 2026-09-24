@@ -15,18 +15,23 @@ scripts=(
 )
 
 printf '== bash syntax ==\n'
-bash -n "${scripts[@]}"
+while IFS= read -r -d '' script; do
+    bash -n "$script"
+done < <(find . -name '*.sh' -print0)
 
 printf '== local harness ==\n'
 tests/run-ghost-display-tests.sh
 
+bash tests/run-unified-tests.sh
+bash tests/run-lifecycle-tests.sh
+bash tests/run-unified-x11-tests.sh
+
 printf '== profile comparison ==\n'
-scripts/compare-ghost-profiles.sh >/tmp/ghost-display-profile-compare.out
-cat /tmp/ghost-display-profile-compare.out
+scripts/compare-ghost-profiles.sh
 
 printf '== direct Wayland selector check ==\n'
 fake_drm="$(mktemp -d)"
-trap 'rm -rf "${fake_drm}" /tmp/ghost-display-profile-compare.out' EXIT
+trap 'rm -rf "${fake_drm}"' EXIT
 mkdir -p "${fake_drm}/card0-HDMI-A-1"
 echo connected >"${fake_drm}/card0-HDMI-A-1/status"
 choice="$(WAYLAND_DISPLAY=wayland-1 XDG_SESSION_TYPE=wayland RUSTDESK_DRM_DIR="${fake_drm}" scripts/rustdesk-auto-display.sh --print)"

@@ -58,6 +58,10 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${REPO_ROOT}/lib"
+if [[ ! -f "${LIB_DIR}/config-loader.sh" ]]; then
+    LIB_DIR="/usr/local/lib/ghost-display"
+fi
+[[ -f "${LIB_DIR}/config-loader.sh" ]] || { echo "Ghost Display library not found: ${LIB_DIR}" >&2; exit 1; }
 
 # Source all library modules
 for lib_file in "${LIB_DIR}"/*.sh; do
@@ -74,11 +78,13 @@ done
 DRY_RUN=false
 FOREGROUND=false
 ROLLBACK=false
+CLI_MODE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode)
-            MODE="$2"
+            [[ $# -ge 2 ]] || { echo "--mode requires a value" >&2; exit 2; }
+            CLI_MODE="$2"
             shift 2
             ;;
         --dry-run)
@@ -113,8 +119,10 @@ if $ROLLBACK; then
     logi "Rolling back Ghost Display installation..."
     
     # Use the installer's rollback functionality
-    if [[ -f "${REPO_ROOT}/scripts/install-alwaysx11.sh" ]]; then
-        bash "${REPO_ROOT}/scripts/install-alwaysx11.sh" --rollback
+    installer="${REPO_ROOT}/scripts/install-ghost-display.sh"
+    [[ -f "$installer" ]] || installer="${LIB_DIR}/scripts/install-ghost-display.sh"
+    if [[ -f "$installer" ]]; then
+        bash "$installer" --rollback
     else
         loge "Installer not found for rollback"
         exit 1
@@ -128,14 +136,15 @@ fi
 
 # Load configuration
 load_config
+[[ -z "$CLI_MODE" ]] || MODE="$CLI_MODE"
+init_logging
 
 # Validate configuration
 validate_config
 
 # Initialize logging (already done by logging.sh)
 
-# Initialize locking
-init_locking
+# Lock only when starting services; a dry run must not claim daemon ownership.
 
 # Detect display manager
 dm_detect
@@ -188,6 +197,12 @@ fi
 # =============================================================================
 # INITIAL STATE SETUP
 # =============================================================================
+
+# Initialize runtime paths and ownership only after dry-run handling.
+mkdir -p "$RUN_DIR" "$XORG_LOG_DIR"
+init_locking
+trap cleanup EXIT
+trap 'exit 0' SIGTERM SIGINT SIGHUP
 
 # Initialize state
 state_init

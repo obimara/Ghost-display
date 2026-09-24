@@ -1,3 +1,16 @@
+## Unreleased — reliability review
+
+- Repair both installer config paths, v2 runtime library discovery and missing dependencies.
+- Keep the v2 rollback entry point available in installed layouts.
+- Make dry runs leave runtime ownership untouched and honor `--mode` over configuration.
+- Fix monitor parsing, propagate XRandR failures and retain Xorg monitor state with `-noreset`.
+- Clean up owned Xorg processes on failures; protect unrelated processes and lock files.
+- Reject zero polling intervals and invalid monitor geometry.
+- Honor X11-only `--no-start` and avoid starting the service twice during installation.
+- Remove per-connector `cat` subprocesses from the RustDesk selector; preserve Wayland sessions.
+- Restrict passwordless VNC to localhost and use its RFB port option.
+- Extend isolated regression coverage; Raspberry Pi/HDMI/RustDesk testing remains required.
+
 # Changelog
 
 ## v3.0.0 — 2026-03-04

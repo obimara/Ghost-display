@@ -4,7 +4,8 @@ set -euo pipefail
 DISPLAY_NUM="${GHOST_DISPLAY_NUM:-20}"
 DISPLAY_NAME="${GHOST_DISPLAY:-:${DISPLAY_NUM}}"
 CONFIG_FILE="${GHOST_XORG_CONFIG:-/etc/X11/ghost-display.conf}"
-PID_FILE="${GHOST_PID_FILE:-${XDG_RUNTIME_DIR:-/tmp}/ghost-display-${DISPLAY_NUM}.pid}"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/ghost-display-${UID}}"
+PID_FILE="${GHOST_PID_FILE:-${RUNTIME_DIR}/ghost-display-${DISPLAY_NUM}.pid}"
 LOG_FILE="${GHOST_XORG_LOG:-/tmp/ghost-display-${DISPLAY_NUM}.log}"
 
 MONITORS="${GHOST_MONITORS:-2}"
@@ -17,6 +18,7 @@ MONITOR_SPECS="${GHOST_MONITOR_SPECS:-}"
 
 DRY_RUN="${GHOST_DRY_RUN:-0}"
 FOREGROUND="${GHOST_STAY_FOREGROUND:-0}"
+OWNED_XORG_PID=""
 
 MAX_WIDTH="${GHOST_MAX_WIDTH:-8192}"
 MAX_HEIGHT="${GHOST_MAX_HEIGHT:-8192}"
@@ -147,6 +149,7 @@ validate_options() {
 
 build_monitor_specs() {
   local raw_specs=()
+  local parsed
   local base_width
   local base_height
   local spec
@@ -173,7 +176,8 @@ build_monitor_specs() {
   if [[ -n "${MONITOR_SPECS}" ]]; then
     IFS=',' read -r -a raw_specs <<<"${MONITOR_SPECS}"
   else
-    read -r base_width base_height <<<"$(parse_resolution "${RESOLUTION}")"
+    parsed="$(parse_resolution "${RESOLUTION}")" || return 2
+    read -r base_width base_height <<<"$parsed"
     for ((i = 1; i <= MONITORS; i++)); do
       raw_specs+=("${base_width}x${base_height}@${SCALE}")
     done
@@ -190,7 +194,8 @@ build_monitor_specs() {
       spec_scale="${SCALE}"
     fi
 
-    read -r width height <<<"$(parse_resolution "${spec_resolution}")"
+    parsed="$(parse_resolution "${spec_resolution}")" || return 2
+    read -r width height <<<"$parsed"
 
     if ! is_positive_number "${spec_scale}"; then
       echo "Invalid scale '${spec_scale}' in GHOST_MONITOR_SPECS." >&2
@@ -199,6 +204,10 @@ build_monitor_specs() {
 
     effective_width="$(scale_pixels "${width}" "${spec_scale}")"
     effective_height="$(scale_pixels "${height}" "${spec_scale}")"
+    if (( effective_width < 1 || effective_height < 1 )); then
+      echo "Scaled monitor dimensions must be at least one pixel." >&2
+      return 2
+    fi
     mm_width="$(pixels_to_mm "${effective_width}" "${DPI}")"
     mm_height="$(pixels_to_mm "${effective_height}" "${DPI}")"
 
@@ -246,6 +255,7 @@ print_plan() {
   echo "Ghost X11 display plan"
   echo "  DISPLAY=${DISPLAY_NAME}"
   echo "  config=${CONFIG_FILE}"
+  echo "  log=${LOG_FILE}"
   echo "  framebuffer=${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT}"
   echo "  dpi=${DPI}"
 
@@ -255,16 +265,25 @@ print_plan() {
 }
 
 is_xorg_running() {
-  if [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
-    return 0
-  fi
+  DISPLAY="${DISPLAY_NAME}" xset q >/dev/null 2>&1
+}
 
-  pgrep -f "Xorg ${DISPLAY_NAME} .*${CONFIG_FILE}" >/dev/null 2>&1
+cleanup_xorg() {
+  if [[ -n "${OWNED_XORG_PID}" ]]; then
+    kill "${OWNED_XORG_PID}" 2>/dev/null || true
+    wait "${OWNED_XORG_PID}" 2>/dev/null || true
+    rm -f "${PID_FILE}"
+    OWNED_XORG_PID=""
+  fi
 }
 
 wait_for_xorg() {
   for _ in {1..40}; do
-    if DISPLAY="${DISPLAY_NAME}" xset q >/dev/null 2>&1; then
+    if ! kill -0 "${OWNED_XORG_PID}" 2>/dev/null; then
+      echo "Xorg exited before becoming ready. Check ${LOG_FILE}" >&2
+      return 1
+    fi
+    if is_xorg_running; then
       return 0
     fi
     sleep 0.25
@@ -274,9 +293,16 @@ wait_for_xorg() {
   return 1
 }
 
-start_xorg_background() {
-  if is_xorg_running; then
-    return 0
+start_xorg() {
+  if [[ -z "${GHOST_PID_FILE:-}" ]]; then
+    if [[ ! -e "${RUNTIME_DIR}" ]]; then
+      mkdir -m 0700 -- "${RUNTIME_DIR}"
+    fi
+    if [[ ! -d "${RUNTIME_DIR}" || -L "${RUNTIME_DIR}" || ! -O "${RUNTIME_DIR}" ]] ||
+       [[ "$(stat -c %a -- "${RUNTIME_DIR}")" != "700" ]]; then
+      echo "Runtime directory must be owned by this user with mode 0700: ${RUNTIME_DIR}" >&2
+      return 1
+    fi
   fi
 
   Xorg "${DISPLAY_NAME}" \
@@ -286,36 +312,31 @@ start_xorg_background() {
     -logfile "${LOG_FILE}" \
     >/dev/null 2>&1 &
 
-  echo "$!" >"${PID_FILE}"
+  OWNED_XORG_PID=$!
+  trap cleanup_xorg EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  echo "${OWNED_XORG_PID}" >"${PID_FILE}"
   wait_for_xorg
+}
+
+start_xorg_background() {
+  if ! is_xorg_running; then
+    start_xorg
+  fi
 }
 
 start_xorg_foreground() {
   if is_xorg_running; then
-    echo "Xorg already appears to be running for ${DISPLAY_NAME}." >&2
-    wait_for_xorg
-    wait "$(cat "${PID_FILE}")"
-    return
+    echo "An X server already answers on ${DISPLAY_NAME}; stop it before starting the foreground service." >&2
+    return 1
   fi
 
-  Xorg "${DISPLAY_NAME}" \
-    -config "${CONFIG_FILE}" \
-    -noreset \
-    +extension RANDR \
-    -logfile "${LOG_FILE}" \
-    >/dev/null 2>&1 &
-
-  local xorg_pid=$!
-  echo "${xorg_pid}" >"${PID_FILE}"
-
-  trap 'kill "${xorg_pid}" 2>/dev/null || true; rm -f "${PID_FILE}"' EXIT INT TERM
-
-  wait_for_xorg
+  start_xorg
   configure_monitors
   print_plan
   echo "RustDesk should be started with DISPLAY=${DISPLAY_NAME}."
-
-  wait "${xorg_pid}"
+  wait "${OWNED_XORG_PID}"
 }
 
 configure_monitors() {
@@ -365,6 +386,9 @@ main() {
 
   start_xorg_background
   configure_monitors
+  # Successful detached starts outlive this launcher; failures still clean up.
+  trap - EXIT INT TERM
+  OWNED_XORG_PID=""
   print_plan
   echo "RustDesk should be started with DISPLAY=${DISPLAY_NAME}."
 }

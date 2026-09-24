@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GHOST_SCRIPT="${GHOST_SCRIPT:-${ROOT_DIR}/scripts/ghost-display-x11.sh}"
+if [[ ! -x "$GHOST_SCRIPT" ]] && command -v ghost-display-x11 >/dev/null 2>&1; then
+    GHOST_SCRIPT="$(command -v ghost-display-x11)"
+fi
 
 profiles=(
     "balanced-dual|GHOST_MONITORS=2 GHOST_RESOLUTION=1920x1080 GHOST_DPI=96|Baseline dual 1080p; best default for RustDesk."
@@ -15,7 +18,7 @@ profile_stats() {
     local env_string="$1"
     local output framebuffer width height pixels mib
     read -r -a env_parts <<<"${env_string}"
-    output="$(env "${env_parts[@]}" "${GHOST_SCRIPT}" --dry-run)"
+    output="$(env -u GHOST_MONITOR_SPECS -u GHOST_MONITORS -u GHOST_RESOLUTION -u GHOST_SCALE -u GHOST_DPI -u GHOST_LAYOUT -u GHOST_WIDTH -u GHOST_HEIGHT "${env_parts[@]}" "${GHOST_SCRIPT}" --dry-run)"
     framebuffer="$(awk -F= '/framebuffer=/ { print $2 }' <<<"${output}")"
     width="${framebuffer%x*}"
     height="${framebuffer#*x}"

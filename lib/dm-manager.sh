@@ -24,7 +24,7 @@ _DM_CANDIDATES=(
 
 # Global variables (will be set by dm_detect)
 DM_FOUND="false"
-DM_SERVICE=""
+DM_SERVICE="${DM_SERVICE:-}"
 DM_NAME="none"
 
 dm_detect() {
