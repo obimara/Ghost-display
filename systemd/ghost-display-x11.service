@@ -1,5 +1,5 @@
 [Unit]
-Description=Ghost X11 dummy display for RustDesk
+Description=Ghost Display managed headless X11 workspace
 Documentation=https://github.com/obimara/Ghost-display
 After=network.target
 

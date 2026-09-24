@@ -46,6 +46,13 @@ display_ready() {
 }
 
 choose_display() {
+  if physical_connector_connected \
+      && [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] \
+      && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+    printf 'wayland:%s\n' "${WAYLAND_DISPLAY}"
+    return
+  fi
+
   if physical_connector_connected && display_ready "${PHYSICAL_DISPLAY}"; then
     printf '%s\n' "${PHYSICAL_DISPLAY}"
   else
@@ -58,7 +65,13 @@ if [[ "${1:-}" == "--print" ]]; then
   exit 0
 fi
 
-export DISPLAY="$(choose_display)"
+selection="$(choose_display)"
+if [[ "${selection}" == wayland:* ]]; then
+  export WAYLAND_DISPLAY="${selection#wayland:}"
+  unset DISPLAY
+else
+  export DISPLAY="${selection}"
+fi
 
 if [[ $# -eq 0 ]]; then
   set -- rustdesk

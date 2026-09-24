@@ -74,11 +74,13 @@ done
 DRY_RUN=false
 FOREGROUND=false
 ROLLBACK=false
+CLI_MODE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode)
-            MODE="$2"
+            [[ $# -ge 2 ]] || { echo "--mode requires a value" >&2; exit 2; }
+            CLI_MODE="$2"
             shift 2
             ;;
         --dry-run)
@@ -128,6 +130,11 @@ fi
 
 # Load configuration
 load_config
+
+# Command-line options have higher precedence than file and environment settings.
+if [[ -n "$CLI_MODE" ]]; then
+    MODE="$CLI_MODE"
+fi
 
 # Validate configuration
 validate_config

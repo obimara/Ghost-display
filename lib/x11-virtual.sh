@@ -288,7 +288,8 @@ virtual_configure_monitors() {
         [[ "${monitor_name}" == "${VIRTUAL_NAME_PREFIX}-"* ]] || continue
         DISPLAY="${VIRTUAL_DISPLAY}" xrandr --delmonitor "${monitor_name}" >/dev/null 2>&1 || true
     done < <(
-        DISPLAY="${VIRTUAL_DISPLAY}" xrandr --listmonitors 2>/dev/null |\n        awk 'NR > 1 { name = $2; sub(/^\+\*/, "", name); sub(/^\+/, "", name); sub(/^\*/, "", name); print name }'
+        DISPLAY="${VIRTUAL_DISPLAY}" xrandr --listmonitors 2>/dev/null |
+            awk 'NR > 1 { name = $2; sub(/^\+\*/, "", name); sub(/^\+/, "", name); sub(/^\*/, "", name); print name }'
     )
 
     # Add new monitors
