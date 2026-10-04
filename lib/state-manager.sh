@@ -96,12 +96,3 @@ state_init() {
         fi
     fi
 }
-
-# Check if state transition is needed
-state_needs_transition() {
-    local current_state="$(state_get)"
-    local target_state="$1"
-    
-    [[ "$current_state" == "$target_state" ]] && return 1
-    return 0
-}

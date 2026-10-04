@@ -157,7 +157,6 @@ logi "  DM: ${DM_NAME} (service: ${DM_SERVICE:-none})"
 logi "  Virtual Display: ${VIRTUAL_DISPLAY}"
 logi "  HDMI Poll: ${HDMI_POLL_INTERVAL}s | Stable: ${HDMI_STABLE_SECONDS} ticks"
 logi "  VNC: ${VNC_ENABLE}"
-logi "  RustDesk Optimized: ${RUSTDESK_OPTIMIZED}"
 logi "========================================"
 
 # =============================================================================
@@ -206,15 +205,6 @@ trap 'exit 0' SIGTERM SIGINT SIGHUP
 
 # Initialize state
 state_init
-
-# Build monitor specs if in virtual or combined mode
-if [[ "$MODE" == "virtual" || "$MODE" == "combined" ]]; then
-    if ! build_monitor_specs; then
-        loge "Failed to build monitor specifications"
-        exit 1
-    fi
-    print_virtual_plan
-fi
 
 # =============================================================================
 # START SERVICES BASED ON MODE
@@ -415,27 +405,18 @@ run_hotplug_loop() {
 # Start services
 start_services
 
-# Run main loop if in hotplug or combined mode
+# --foreground remains accepted for compatibility. The daemon always stays in
+# the foreground so systemd can supervise it directly.
+if $FOREGROUND; then
+    logi "Running in foreground (press Ctrl+C to stop)"
+else
+    logi "Running (use journalctl for logs when started as a service)"
+fi
+
 if [[ "$MODE" == "hotplug" || "$MODE" == "combined" ]]; then
-    if $FOREGROUND; then
-        logi "Running in foreground (press Ctrl+C to stop)"
-        run_hotplug_loop
-    else
-        logi "Running in background (use journalctl to view logs)"
-        run_hotplug_loop
-    fi
-elif [[ "$MODE" == "virtual" ]]; then
-    if $FOREGROUND; then
-        logi "Virtual display running in foreground (press Ctrl+C to stop)"
-        # Keep running until interrupted
-        while true; do
-            sleep 60
-        done
-    else
-        logi "Virtual display running in background"
-        # Keep running until interrupted
-        while true; do
-            sleep 60
-        done
-    fi
+    run_hotplug_loop
+else
+    while true; do
+        sleep 60
+    done
 fi

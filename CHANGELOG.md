@@ -1,3 +1,13 @@
+## Unreleased — code simplification
+
+- Share monitor geometry and validation between v2 and the X11-only launcher.
+- Calculate both pixel and physical dimensions in one awk call per monitor.
+- Apply the existing v2 limits to both launchers and reject multiline profiles.
+- Remove unused HDMI/state/DM/VNC helpers and inactive configuration switches.
+- Remove duplicate startup profile calculations and daemon loop branches.
+- Test installed helper lookup and default-profile subprocess count.
+- Replace obsolete repository-import instructions with current contributor guidance.
+
 ## Unreleased — reliability review
 
 - Repair both installer config paths, v2 runtime library discovery and missing dependencies.

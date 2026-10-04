@@ -8,20 +8,20 @@ RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/ghost-display-${UID}}"
 PID_FILE="${GHOST_PID_FILE:-${RUNTIME_DIR}/ghost-display-${DISPLAY_NUM}.pid}"
 LOG_FILE="${GHOST_XORG_LOG:-/tmp/ghost-display-${DISPLAY_NUM}.log}"
 
-MONITORS="${GHOST_MONITORS:-2}"
-RESOLUTION="${GHOST_RESOLUTION:-${GHOST_WIDTH:-1920}x${GHOST_HEIGHT:-1080}}"
-SCALE="${GHOST_SCALE:-1.0}"
-DPI="${GHOST_DPI:-96}"
-LAYOUT="${GHOST_LAYOUT:-horizontal}"
-NAME_PREFIX="${GHOST_NAME_PREFIX:-Ghost}"
-MONITOR_SPECS="${GHOST_MONITOR_SPECS:-}"
+VIRTUAL_MONITORS="${GHOST_MONITORS:-2}"
+VIRTUAL_RESOLUTION="${GHOST_RESOLUTION:-${GHOST_WIDTH:-1920}x${GHOST_HEIGHT:-1080}}"
+VIRTUAL_SCALE="${GHOST_SCALE:-1.0}"
+VIRTUAL_DPI="${GHOST_DPI:-96}"
+VIRTUAL_LAYOUT="${GHOST_LAYOUT:-horizontal}"
+VIRTUAL_NAME_PREFIX="${GHOST_NAME_PREFIX:-Ghost}"
+VIRTUAL_MONITOR_SPECS="${GHOST_MONITOR_SPECS:-}"
 
 DRY_RUN="${GHOST_DRY_RUN:-0}"
 FOREGROUND="${GHOST_STAY_FOREGROUND:-0}"
 OWNED_XORG_PID=""
 
-MAX_WIDTH="${GHOST_MAX_WIDTH:-8192}"
-MAX_HEIGHT="${GHOST_MAX_HEIGHT:-8192}"
+VIRTUAL_MAX_WIDTH="${GHOST_MAX_WIDTH:-8192}"
+VIRTUAL_MAX_HEIGHT="${GHOST_MAX_HEIGHT:-8192}"
 
 usage() {
   cat <<'USAGE'
@@ -81,175 +81,13 @@ require_command() {
   fi
 }
 
-is_positive_int() {
-  [[ "$1" =~ ^[1-9][0-9]*$ ]]
-}
-
-is_positive_number() {
-  [[ "$1" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v value="$1" 'BEGIN { exit !(value > 0) }'
-}
-
-scale_pixels() {
-  local pixels="$1"
-  local scale="$2"
-  awk -v pixels="${pixels}" -v scale="${scale}" 'BEGIN { printf "%d", (pixels * scale) + 0.5 }'
-}
-
-pixels_to_mm() {
-  local pixels="$1"
-  local dpi="$2"
-  local mm
-
-  mm="$(awk -v pixels="${pixels}" -v dpi="${dpi}" 'BEGIN { printf "%d", (pixels * 25.4 / dpi) + 0.5 }')"
-
-  if [[ "${mm}" -lt 1 ]]; then
-    mm=1
-  fi
-
-  printf '%s' "${mm}"
-}
-
-parse_resolution() {
-  local value="$1"
-
-  if [[ ! "${value}" =~ ^([1-9][0-9]*)x([1-9][0-9]*)$ ]]; then
-    echo "Invalid resolution '${value}'. Use WIDTHxHEIGHT, for example 1920x1080." >&2
-    exit 2
-  fi
-
-  printf '%s %s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
-}
-
-validate_options() {
-  if ! is_positive_int "${MONITORS}"; then
-    echo "GHOST_MONITORS must be a positive integer." >&2
-    exit 2
-  fi
-
-  if ! is_positive_number "${SCALE}"; then
-    echo "GHOST_SCALE must be a positive number." >&2
-    exit 2
-  fi
-
-  if ! is_positive_number "${DPI}"; then
-    echo "GHOST_DPI must be a positive number." >&2
-    exit 2
-  fi
-
-  if [[ "${LAYOUT}" != "horizontal" && "${LAYOUT}" != "vertical" ]]; then
-    echo "GHOST_LAYOUT must be 'horizontal' or 'vertical'." >&2
-    exit 2
-  fi
-
-  if ! is_positive_int "${MAX_WIDTH}" || ! is_positive_int "${MAX_HEIGHT}"; then
-    echo "GHOST_MAX_WIDTH and GHOST_MAX_HEIGHT must be positive integers." >&2
-    exit 2
-  fi
-}
-
-build_monitor_specs() {
-  local raw_specs=()
-  local parsed
-  local base_width
-  local base_height
-  local spec
-  local spec_resolution
-  local spec_scale
-  local width
-  local height
-  local effective_width
-  local effective_height
-  local mm_width
-  local mm_height
-  local offset_x=0
-  local offset_y=0
-  local index=1
-
-  MONITOR_NAMES=()
-  MONITOR_WIDTHS=()
-  MONITOR_HEIGHTS=()
-  MONITOR_MM_WIDTHS=()
-  MONITOR_MM_HEIGHTS=()
-  MONITOR_X=()
-  MONITOR_Y=()
-
-  if [[ -n "${MONITOR_SPECS}" ]]; then
-    IFS=',' read -r -a raw_specs <<<"${MONITOR_SPECS}"
-  else
-    parsed="$(parse_resolution "${RESOLUTION}")" || return 2
-    read -r base_width base_height <<<"$parsed"
-    for ((i = 1; i <= MONITORS; i++)); do
-      raw_specs+=("${base_width}x${base_height}@${SCALE}")
-    done
-  fi
-
-  for spec in "${raw_specs[@]}"; do
-    spec="${spec//[[:space:]]/}"
-
-    if [[ "${spec}" == *"@"* ]]; then
-      spec_resolution="${spec%@*}"
-      spec_scale="${spec##*@}"
-    else
-      spec_resolution="${spec}"
-      spec_scale="${SCALE}"
-    fi
-
-    parsed="$(parse_resolution "${spec_resolution}")" || return 2
-    read -r width height <<<"$parsed"
-
-    if ! is_positive_number "${spec_scale}"; then
-      echo "Invalid scale '${spec_scale}' in GHOST_MONITOR_SPECS." >&2
-      exit 2
-    fi
-
-    effective_width="$(scale_pixels "${width}" "${spec_scale}")"
-    effective_height="$(scale_pixels "${height}" "${spec_scale}")"
-    if (( effective_width < 1 || effective_height < 1 )); then
-      echo "Scaled monitor dimensions must be at least one pixel." >&2
-      return 2
-    fi
-    mm_width="$(pixels_to_mm "${effective_width}" "${DPI}")"
-    mm_height="$(pixels_to_mm "${effective_height}" "${DPI}")"
-
-    MONITOR_NAMES+=("${NAME_PREFIX}-${index}")
-    MONITOR_WIDTHS+=("${effective_width}")
-    MONITOR_HEIGHTS+=("${effective_height}")
-    MONITOR_MM_WIDTHS+=("${mm_width}")
-    MONITOR_MM_HEIGHTS+=("${mm_height}")
-    MONITOR_X+=("${offset_x}")
-    MONITOR_Y+=("${offset_y}")
-
-    if [[ "${LAYOUT}" == "horizontal" ]]; then
-      offset_x=$((offset_x + effective_width))
-    else
-      offset_y=$((offset_y + effective_height))
-    fi
-
-    index=$((index + 1))
-  done
-
-  FRAMEBUFFER_WIDTH=0
-  FRAMEBUFFER_HEIGHT=0
-
-  for i in "${!MONITOR_NAMES[@]}"; do
-    local right=$((MONITOR_X[i] + MONITOR_WIDTHS[i]))
-    local bottom=$((MONITOR_Y[i] + MONITOR_HEIGHTS[i]))
-
-    if (( right > FRAMEBUFFER_WIDTH )); then
-      FRAMEBUFFER_WIDTH="${right}"
-    fi
-
-    if (( bottom > FRAMEBUFFER_HEIGHT )); then
-      FRAMEBUFFER_HEIGHT="${bottom}"
-    fi
-  done
-
-  if (( FRAMEBUFFER_WIDTH > MAX_WIDTH || FRAMEBUFFER_HEIGHT > MAX_HEIGHT )); then
-    echo "Requested framebuffer ${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT} exceeds ${MAX_WIDTH}x${MAX_HEIGHT}." >&2
-    echo "Increase the Xorg Virtual size/VideoRam and set GHOST_MAX_WIDTH/GHOST_MAX_HEIGHT to match." >&2
-    exit 2
-  fi
-}
+# Locate the same profile implementation in a checkout or installed layout.
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROFILE_LIB="${SCRIPT_ROOT}/lib/monitor-profile.sh"
+[[ -f "$PROFILE_LIB" ]] || PROFILE_LIB="${SCRIPT_ROOT}/lib/ghost-display-x11/monitor-profile.sh"
+# shellcheck source=lib/monitor-profile.sh
+source "$PROFILE_LIB"
+loge() { printf '%s\n' "$*" >&2; }
 
 print_plan() {
   echo "Ghost X11 display plan"
@@ -257,7 +95,7 @@ print_plan() {
   echo "  config=${CONFIG_FILE}"
   echo "  log=${LOG_FILE}"
   echo "  framebuffer=${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT}"
-  echo "  dpi=${DPI}"
+  echo "  dpi=${VIRTUAL_DPI}"
 
   for i in "${!MONITOR_NAMES[@]}"; do
     echo "  ${MONITOR_NAMES[i]}: ${MONITOR_WIDTHS[i]}x${MONITOR_HEIGHTS[i]}+${MONITOR_X[i]}+${MONITOR_Y[i]} (${MONITOR_MM_WIDTHS[i]}x${MONITOR_MM_HEIGHTS[i]}mm)"
@@ -343,7 +181,7 @@ configure_monitors() {
   DISPLAY="${DISPLAY_NAME}" xrandr --fb "${FRAMEBUFFER_WIDTH}x${FRAMEBUFFER_HEIGHT}"
 
   while read -r monitor_name; do
-    [[ "${monitor_name}" == "${NAME_PREFIX}-"* ]] || continue
+    [[ "${monitor_name}" == "${VIRTUAL_NAME_PREFIX}-"* ]] || continue
     DISPLAY="${DISPLAY_NAME}" xrandr --delmonitor "${monitor_name}" >/dev/null 2>&1 || true
   done < <(
     DISPLAY="${DISPLAY_NAME}" xrandr --listmonitors |
@@ -357,12 +195,11 @@ configure_monitors() {
       none
   done
 
-  printf 'Xft.dpi: %s\n' "${DPI}" | DISPLAY="${DISPLAY_NAME}" xrdb -merge
+  printf 'Xft.dpi: %s\n' "${VIRTUAL_DPI}" | DISPLAY="${DISPLAY_NAME}" xrdb -merge
 }
 
 main() {
-  validate_options
-  build_monitor_specs
+  build_monitor_specs || return 2
 
   if [[ "${DRY_RUN}" == "1" ]]; then
     print_plan

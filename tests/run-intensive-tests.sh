@@ -6,6 +6,8 @@ cd "${ROOT_DIR}"
 
 scripts=(
     install.sh
+    lib/monitor-profile.sh
+    tests/run-profile-tests.sh
     scripts/ghost-display-x11.sh
     scripts/compare-ghost-profiles.sh
     scripts/debug-ghost-display.sh
@@ -25,6 +27,7 @@ tests/run-ghost-display-tests.sh
 bash tests/run-unified-tests.sh
 bash tests/run-lifecycle-tests.sh
 bash tests/run-unified-x11-tests.sh
+bash tests/run-profile-tests.sh
 
 printf '== profile comparison ==\n'
 scripts/compare-ghost-profiles.sh
