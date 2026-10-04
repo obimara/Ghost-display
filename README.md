@@ -46,6 +46,18 @@ Ghost Display v2 is a **complete merge** of:
 
 ---
 
+## Shared profile implementation
+
+The unified daemon and X11-only launcher use `lib/monitor-profile.sh` for monitor
+validation, scaling and layout. Existing `GHOST_*` and v2 `VIRTUAL_*` settings are
+preserved. Both launchers now enforce the same profile limits: 1–64 monitors,
+DPI 1–10000, and positive dimensions within the configured framebuffer limit
+(maximum 32767 per axis). Invalid or empty monitor entries fail before Xorg starts.
+
+The X11-only launcher requires its installed helper; use `install.sh` instead of
+copying the launcher alone. `RUSTDESK_OPTIMIZED` was removed from the supplied
+configuration because it never affected behavior; an old setting remains harmless.
+
 ## Reliability checks
 
 Run `bash tests/run-intensive-tests.sh` from the checkout. This checks Bash syntax

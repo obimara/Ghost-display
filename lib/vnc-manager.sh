@@ -73,11 +73,3 @@ vnc_stop() {
     logd "x11vnc stopped"
     return 0
 }
-
-# Check if VNC is running
-vnc_is_running() {
-    [[ -f "$VNC_PID_FILE" ]] || return 1
-    local pid
-    pid=$(cat "$VNC_PID_FILE" 2>/dev/null || echo "")
-    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
-}

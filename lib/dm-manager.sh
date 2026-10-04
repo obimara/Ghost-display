@@ -140,9 +140,3 @@ dm_stop() {
     logw "Display manager ${DM_NAME} stop timed out"
     return 1
 }
-
-# Get display manager unit name
-dm_unit() {
-    local svc="${DM_SERVICE:-}"
-    [[ "$svc" == *.service ]] && echo "$svc" || echo "${svc}.service"
-}

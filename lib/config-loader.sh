@@ -34,7 +34,6 @@ HDMI_DRM_ROOT="${DRM_ROOT:-/sys/class/drm}"
 
 # ===== Display Manager Settings =====
 DM_SERVICE="${DM_SERVICE:-}"
-DM_LIB="${DM_LIB:-/usr/local/lib/ghost-display/dm-detect.sh}"
 
 # ===== Xorg Settings =====
 XORG_BIN="${XORG_BIN:-/usr/bin/Xorg}"
@@ -62,9 +61,6 @@ LOG_TAG="ghost-display"
 
 # ===== Timeout Settings =====
 WAIT_TIMEOUT_S="${WAIT_TIMEOUT_S:-15}"
-
-# ===== RustDesk Optimization =====
-RUSTDESK_OPTIMIZED="${RUSTDESK_OPTIMIZED:-true}"
 
 # =============================================================================
 # LOAD CONFIGURATION FILE

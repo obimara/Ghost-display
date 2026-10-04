@@ -80,6 +80,7 @@ install_optional_script() {
 
 install_files() {
   install -D -m 0644 "${ROOT_DIR}/config/20-ghost-display.conf" /etc/X11/ghost-display.conf
+  install -D -m 0644 "${ROOT_DIR}/lib/monitor-profile.sh" /usr/local/lib/ghost-display-x11/monitor-profile.sh
   install -D -m 0755 "${ROOT_DIR}/scripts/ghost-display-x11.sh" /usr/local/bin/ghost-display-x11
   install -D -m 0755 "${ROOT_DIR}/scripts/rustdesk-auto-display.sh" /usr/local/bin/rustdesk-auto-display
   install -D -m 0644 "${ROOT_DIR}/systemd/${SERVICE_NAME}" "/etc/systemd/system/${SERVICE_NAME}"
